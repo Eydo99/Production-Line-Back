@@ -12,7 +12,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 public class Machine implements MachineObserver {
-    
+    private String status = "idle";
     private String name;
     private int id;
     
@@ -115,4 +115,11 @@ public class Machine implements MachineObserver {
         this.isReady = true;
         notifyReady();
     }
+
+    public String getStatus() {
+    if (!isReady) {
+        return "processing";
+    }
+    return "idle";
+}
 }

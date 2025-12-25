@@ -2,13 +2,17 @@ package com.example.producuctionLine.service;
 
 import com.example.producuctionLine.model.Connection;
 import com.example.producuctionLine.model.Machine;
+import com.example.producuctionLine.model.Product;
 import com.example.producuctionLine.model.Queue;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Singleton class to manage entire simulation
@@ -23,7 +27,6 @@ public class SimulationManager {
     private final Map<String, Machine> machines = new ConcurrentHashMap<>();
     private final List<Connection> connections = new ArrayList<>();
     
-    private volatile boolean isRunning = false;
     
     // Counters for IDs
     private int queueCounter = 0;
@@ -35,6 +38,12 @@ public class SimulationManager {
     /**
      * Get singleton instance
      */
+
+
+    private ExecutorService machineExecutor;
+private Thread productGeneratorThread;
+private volatile boolean isRunning = false;
+
     public static synchronized SimulationManager getInstance() {
         if (instance == null) {
             instance = new SimulationManager();
@@ -198,4 +207,107 @@ public class SimulationManager {
         isRunning = false;
         System.out.println("🧹 Simulation cleared");
     }
+
+
+
+    public void startSimulation() {
+    if (isRunning) {
+        throw new IllegalStateException("Simulation already running");
+    }
+    
+    if (queues.isEmpty()) {
+        throw new IllegalStateException("Add at least one queue before starting");
+    }
+    
+    isRunning = true;
+    
+    // Start all machines as threads
+    machineExecutor = Executors.newCachedThreadPool();
+    for (Machine machine : machines.values()) {
+        machineExecutor.submit(() -> {
+            while (isRunning) {
+                try {
+                    if (machine.isReady() && machine.getInputQueue() != null) {
+                        Product product = machine.getInputQueue().dequeue();
+                        if (product != null) {
+                            processMachineProduct(machine, product);
+                        }
+                    }
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        });
+    }
+    
+    // Start product generator
+    productGeneratorThread = new Thread(() -> {
+        Random random = new Random();
+        while (isRunning) {
+            try {
+                Thread.sleep(1000 + random.nextInt(2000)); // 1-3 seconds
+                
+                // Generate product at first queue
+                if (!queues.isEmpty()) {
+                    Queue firstQueue = queues.values().iterator().next();
+                    Product product = new Product();
+                    firstQueue.enqueue(product);
+                    System.out.println("🆕 Generated product: " + product.getId());
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+    });
+    productGeneratorThread.start();
+    
+    System.out.println("▶️ Simulation STARTED");
+}
+
+public void stopSimulation() {
+    isRunning = false;
+    
+    if (machineExecutor != null) {
+        machineExecutor.shutdownNow();
+    }
+    
+    if (productGeneratorThread != null) {
+        productGeneratorThread.interrupt();
+    }
+    
+    System.out.println("⏸️ Simulation STOPPED");
+}
+
+private void processMachineProduct(Machine machine, Product product) {
+    try {
+        machine.setReady(false);
+        machine.setColor(product.getColor());
+        machine.setCurrentProduct(product);
+        
+        System.out.println("⚙️ " + machine.getName() + " processing " + product.getId());
+        
+        // Broadcast machine status
+        // Person 4 will implement WebSocket here
+        
+        Thread.sleep(machine.getServiceTime());
+        
+        // Flash effect
+        System.out.println("✨ " + machine.getName() + " finished!");
+        
+        // Move to output queue
+        if (machine.getOutputQueue() != null) {
+            machine.getOutputQueue().enqueue(product);
+        }
+        
+        machine.setCurrentProduct(null);
+        machine.setColor(machine.getDefaultColor());
+        machine.setReady(true);
+        
+    } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+    }
+}
 }
