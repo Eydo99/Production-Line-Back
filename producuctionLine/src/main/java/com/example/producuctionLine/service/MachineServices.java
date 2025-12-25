@@ -19,7 +19,7 @@ class MachineService {
 
     public void finishProcessing(Machine machine,Product product) {
         machine.getNext().get(selectQueue(machine)).add(product); 
-        machine.setColor(machine.getDefaoultColor());
+        machine.setColor(machine.getDefaultColor());
         machine.setCurrentProduct(null);
         machine.setReady(true);
         machine.notifyReady();

@@ -1,6 +1,7 @@
 package com.example.producuctionLine.service;
 
 import com.example.producuctionLine.model.Connection;
+import com.example.producuctionLine.model.Machine;
 import com.example.producuctionLine.model.Queue;
 import org.springframework.stereotype.Service;
 
@@ -19,9 +20,14 @@ public class SimulationManager {
     
     // Thread-safe collections
     private final Map<String, Queue> queues = new ConcurrentHashMap<>();
+    private final Map<String, Machine> machines = new ConcurrentHashMap<>();
     private final List<Connection> connections = new ArrayList<>();
     
     private volatile boolean isRunning = false;
+    
+    // Counters for IDs
+    private int queueCounter = 0;
+    private int machineCounter = 0;
     
     // Private constructor for Singleton
     private SimulationManager() {}
@@ -42,7 +48,8 @@ public class SimulationManager {
      * Add new queue to simulation
      */
     public Queue addQueue(double x, double y) {
-        String id = "Q" + (queues.size() + 1);
+        queueCounter++;
+        String id = "Q" + queueCounter;
         Queue queue = new Queue(id, x, y);
         queues.put(id, queue);
         System.out.println("🆕 Queue created: " + id + " at (" + x + ", " + y + ")");
@@ -73,21 +80,92 @@ public class SimulationManager {
         }
     }
     
+    // ========== MACHINE MANAGEMENT ==========
+    
+    /**
+     * Add new machine to simulation
+     */
+    public Machine addMachine(double x, double y) {
+        machineCounter++;
+        String id = "M" + machineCounter;
+        Machine machine = new Machine(id, machineCounter, x, y);
+        machines.put(id, machine);
+        System.out.println("🆕 Machine created: " + id + " at (" + x + ", " + y + ")");
+        return machine;
+    }
+    
+    /**
+     * Get machine by ID
+     */
+    public Machine getMachine(String id) {
+        return machines.get(id);
+    }
+    
+    /**
+     * Get all machines
+     */
+    public Map<String, Machine> getMachines() {
+        return machines;
+    }
+    
+    /**
+     * Remove machine
+     */
+    public void removeMachine(String id) {
+        Machine removed = machines.remove(id);
+        if (removed != null) {
+            System.out.println("🗑️ Machine removed: " + id);
+        }
+    }
+    
     // ========== CONNECTION MANAGEMENT ==========
     
     /**
      * Create connection between nodes
+     * Validates Q→M→Q pattern
      */
     public Connection createConnection(String fromId, String toId) {
-        // Validate connection exists
-        if (!queues.containsKey(fromId) && !queues.containsKey(toId)) {
-            throw new IllegalArgumentException("Invalid connection nodes");
+        // Validate nodes exist
+        boolean fromExists = queues.containsKey(fromId) || machines.containsKey(fromId);
+        boolean toExists = queues.containsKey(toId) || machines.containsKey(toId);
+        
+        if (!fromExists || !toExists) {
+            throw new IllegalArgumentException("One or both nodes do not exist");
         }
         
+        // Validate Q→M or M→Q pattern
+        char fromType = fromId.charAt(0);
+        char toType = toId.charAt(0);
+        
+        if (!((fromType == 'Q' && toType == 'M') || (fromType == 'M' && toType == 'Q'))) {
+            throw new IllegalArgumentException("Invalid connection pattern. Must be Q→M or M→Q");
+        }
+        
+        // Create connection
         Connection connection = new Connection(fromId, toId);
         connections.add(connection);
         
-        System.out.println("🔗 Connection created: " + fromId + " → " + toId);
+        // Wire up the actual objects
+        if (fromType == 'Q' && toType == 'M') {
+            // Queue → Machine
+            Queue queue = queues.get(fromId);
+            Machine machine = machines.get(toId);
+            
+            machine.setInputQueue(queue);
+            queue.registerObserver(machine); // Machine observes queue
+            
+            System.out.println("🔗 Connected: Queue " + fromId + " → Machine " + toId);
+            
+        } else if (fromType == 'M' && toType == 'Q') {
+            // Machine → Queue
+            Machine machine = machines.get(fromId);
+            Queue queue = queues.get(toId);
+            
+            machine.setOutputQueue(queue);
+            
+            System.out.println("🔗 Connected: Machine " + fromId + " → Queue " + toId);
+        }
+        
         return connection;
     }
     
@@ -113,7 +191,10 @@ public class SimulationManager {
      */
     public void clearSimulation() {
         queues.clear();
+        machines.clear();
         connections.clear();
+        queueCounter = 0;
+        machineCounter = 0;
         isRunning = false;
         System.out.println("🧹 Simulation cleared");
     }
