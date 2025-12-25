@@ -1,4 +1,4 @@
-package com.example.producuctionLine.model.dto;
+package com.example.producuctionLine.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

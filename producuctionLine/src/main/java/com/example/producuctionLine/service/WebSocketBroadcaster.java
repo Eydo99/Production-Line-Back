@@ -1,6 +1,5 @@
 package com.example.producuctionLine.service;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
@@ -9,16 +8,16 @@ public class WebSocketBroadcaster {
 
     private final SimpMessagingTemplate messagingTemplate;
 
-    @Autowired
+    // Remove @Autowired - Spring auto-injects with single constructor
     public WebSocketBroadcaster(SimpMessagingTemplate messagingTemplate) {
         this.messagingTemplate = messagingTemplate;
     }
 
-    public void broadcastQueueUpdate(com.example.producuctionLine.model.dto.QueueUpdateDTO update) {
+    public void broadcastQueueUpdate(com.example.producuctionLine.dto.QueueUpdateDTO update) {
         messagingTemplate.convertAndSend("/topic/queues", update);
     }
 
-    public void broadcastMachineUpdate(com.example.producuctionLine.model.dto.MachineUpdateDTO update) {
+    public void broadcastMachineUpdate(com.example.producuctionLine.dto.MachineUpdateDTO update) {
         messagingTemplate.convertAndSend("/topic/machines", update);
     }
 

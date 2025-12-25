@@ -1,4 +1,4 @@
-package com.example.producuctionLine.model.dto;
+package com.example.producuctionLine.model;
 
 import java.util.ArrayList;
 import java.util.List;

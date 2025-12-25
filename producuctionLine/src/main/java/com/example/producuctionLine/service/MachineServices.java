@@ -4,8 +4,8 @@ import java.util.Random;
 
 import org.springframework.stereotype.Service;
 
-import com.example.producuctionLine.model.dto.Machine;
-import com.example.producuctionLine.model.dto.Product;
+import com.example.producuctionLine.model.Machine;
+import com.example.producuctionLine.model.Product;
 
 @Service
 class MachineService {
