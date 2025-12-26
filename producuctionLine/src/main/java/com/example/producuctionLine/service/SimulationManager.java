@@ -287,7 +287,7 @@ private void processMachineProduct(Machine machine, Product product) {
         machine.setColor(product.getColor());
         machine.setCurrentProduct(product);
         
-        System.out.println("⚙️ " + machine.getName() + " processing " + product.getId());
+        System.out.println("⚙️ " + machine.getId() + " processing " + product.getId());
         
         // Broadcast machine status
         // Person 4 will implement WebSocket here
@@ -295,7 +295,7 @@ private void processMachineProduct(Machine machine, Product product) {
         Thread.sleep(machine.getServiceTime());
         
         // Flash effect
-        System.out.println("✨ " + machine.getName() + " finished!");
+        System.out.println("✨ " + machine.getId() + " finished!");
         
         // Move to output queue
         if (machine.getOutputQueue() != null) {
