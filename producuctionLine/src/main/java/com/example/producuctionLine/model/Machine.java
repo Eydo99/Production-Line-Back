@@ -2,6 +2,7 @@ package com.example.producuctionLine.model;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 import com.example.producuctionLine.Obserevers.MachineObserver;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -15,33 +16,33 @@ public class Machine implements MachineObserver {
     private String status = "idle";
     private String name;
     private int id;
-    
+
     // Position on canvas
     private double x;
     private double y;
-    
+
     @JsonIgnore
     private List<MachineQueue> next = new ArrayList<>();
-    
+
     @JsonIgnore
     private List<MachineObserver> observers = new ArrayList<>();
-    
-    private int serviceTime = 2000; // Default 2 seconds
+
+    private int serviceTime = serviceTime(); // Default 2 seconds
     private String color;
     private String defaultColor = "#3b82f6"; // Blue
-    
+
     @JsonIgnore
     private Product currentProduct;
-    
+
     private boolean isReady = true;
-    
+
     // Input/Output queues for connections
     @JsonIgnore
     private Queue inputQueue;
-    
+
     @JsonIgnore
     private Queue outputQueue;
-    
+
     /**
      * Constructor with position
      */
@@ -52,31 +53,31 @@ public class Machine implements MachineObserver {
         this.y = y;
         this.color = defaultColor;
     }
-    
+
     // Register an observer (input queue)
     public void addObserver(MachineObserver observer) {
         if (!observers.contains(observer)) {
             observers.add(observer);
         }
     }
-    
+
     // Remove an observer
     public void removeObserver(MachineObserver observer) {
         observers.remove(observer);
     }
-    
+
     // Notify all observers that machine is ready
     public void notifyReady() {
         for (MachineObserver observer : observers) {
             observer.onMachineReady(this);
         }
     }
-    
+
     @Override
     public void onMachineReady(Machine machine) {
         // Implementation if needed
     }
-    
+
     @Override
     public void onProductAvailable(Queue queue) {
         if (isReady && queue == inputQueue && !queue.isEmpty()) {
@@ -87,7 +88,7 @@ public class Machine implements MachineObserver {
             }
         }
     }
-    
+
     /**
      * Process a product (simplified for now)
      */
@@ -95,12 +96,12 @@ public class Machine implements MachineObserver {
         this.isReady = false;
         this.currentProduct = product;
         this.color = product.getColor();
-        
+
         System.out.println("⚙️ Machine " + name + " processing product " + product.getId());
-        
+
         // Person 3 will implement threading here
     }
-    
+
     /**
      * Finish processing and move product to output
      */
@@ -109,7 +110,7 @@ public class Machine implements MachineObserver {
             outputQueue.enqueue(currentProduct);
             System.out.println("✅ Machine " + name + " finished processing");
         }
-        
+
         this.currentProduct = null;
         this.color = defaultColor;
         this.isReady = true;
@@ -117,9 +118,12 @@ public class Machine implements MachineObserver {
     }
 
     public String getStatus() {
-    if (!isReady) {
-        return "processing";
+        if (!isReady) {
+            return "processing";
+        }
+        return "idle";
     }
-    return "idle";
-}
+    public int serviceTime() {
+        return new Random().nextInt(5000) + 1000;
+    }
 }
