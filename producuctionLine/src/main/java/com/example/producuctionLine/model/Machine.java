@@ -1,7 +1,5 @@
 package com.example.producuctionLine.model;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Random;
 
 import com.example.producuctionLine.Obserevers.MachineObserver;
@@ -13,117 +11,145 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 public class Machine implements MachineObserver {
-    private String status = "idle";
-    private String name;
-    private int id;
-
-    // Position on canvas
+    
+    // ========== IDENTIFICATION ==========
+    private String id;              // M1, M2, etc. (for frontend)
+    private int machineNumber;      // 1, 2, 3 (numeric ID)
+    
+    // ========== POSITION ==========
     private double x;
     private double y;
-
-    @JsonIgnore
-    private List<MachineQueue> next = new ArrayList<>();
-
-    @JsonIgnore
-    private List<MachineObserver> observers = new ArrayList<>();
-
-    private int serviceTime = serviceTime(); // Default 2 seconds
+    
+    // ========== STATUS ==========
+    private String status = "idle"; // "idle", "processing", "error"
+    private String currentTask;     // Display current product ID
+    private boolean ready = true;   // Is machine ready for next product
+    
+    // ========== APPEARANCE ==========
     private String color;
     private String defaultColor = "#3b82f6"; // Blue
-
+    
+    // ========== PROCESSING ==========
+    private int serviceTime;        // Random processing time (ms)
+    
     @JsonIgnore
     private Product currentProduct;
-
-    private boolean isReady = true;
-
-    // Input/Output queues for connections
+    
+    // ========== CONNECTIONS ==========
     @JsonIgnore
-    private Queue inputQueue;
-
+    private Queue inputQueue;       // Where products come from
+    
     @JsonIgnore
-    private Queue outputQueue;
-
+    private Queue outputQueue;      // Where products go to
+    
     /**
      * Constructor with position
      */
-    public Machine(String name, int id, double x, double y) {
-        this.name = name;
+    public Machine(String id, int machineNumber, double x, double y) {
         this.id = id;
+        this.machineNumber = machineNumber;
         this.x = x;
         this.y = y;
         this.color = defaultColor;
+        this.serviceTime = generateServiceTime();
     }
-
-    // Register an observer (input queue)
-    public void addObserver(MachineObserver observer) {
-        if (!observers.contains(observer)) {
-            observers.add(observer);
-        }
-    }
-
-    // Remove an observer
-    public void removeObserver(MachineObserver observer) {
-        observers.remove(observer);
-    }
-
-    // Notify all observers that machine is ready
-    public void notifyReady() {
-        for (MachineObserver observer : observers) {
-            observer.onMachineReady(this);
-        }
-    }
-
-    @Override
-    public void onMachineReady(Machine machine) {
-        // Implementation if needed
-    }
-
+    
+    // ========== OBSERVER PATTERN ==========
+    
+    /**
+     * Called when input queue has products available
+     */
     @Override
     public void onProductAvailable(Queue queue) {
-        if (isReady && queue == inputQueue && !queue.isEmpty()) {
-            // Pull product from queue and process
+        // Only react if: ready, it's my input queue, and queue has products
+        if (ready && queue == inputQueue && !queue.isEmpty()) {
             Product product = queue.dequeue();
             if (product != null) {
                 processProduct(product);
             }
         }
     }
-
+    
+    // ========== PROCESSING LOGIC ==========
+    
     /**
-     * Process a product (simplified for now)
+     * Process a product asynchronously
      */
     private void processProduct(Product product) {
-        this.isReady = false;
+        // Update state
+        this.ready = false;
+        this.status = "processing";
         this.currentProduct = product;
+        this.currentTask = product.getId();
         this.color = product.getColor();
-
-        System.out.println("⚙️ Machine " + name + " processing product " + product.getId());
-
-        // Person 3 will implement threading here
+        
+        System.out.println("⚙️ " + id + " started processing " + product.getId());
+        
+        // TODO: Person 4 - Add WebSocket broadcast here
+        // wsService.broadcastMachineUpdate(this);
+        
+        // // Process in background thread
+        // CompletableFuture.runAsync(() -> {
+        //     try {
+        //         Thread.sleep(serviceTime);
+        //         finishProcessing(product);
+        //     } catch (InterruptedException e) {
+        //         handleError(e);
+        //     }
+        // });
     }
-
+    
     /**
-     * Finish processing and move product to output
+     * Finish processing and move product to output queue
      */
-    public void finishProcessing() {
-        if (currentProduct != null && outputQueue != null) {
-            outputQueue.enqueue(currentProduct);
-            System.out.println("✅ Machine " + name + " finished processing");
+    private void finishProcessing(Product product) {
+        System.out.println("✅ " + id + " finished processing " + product.getId());
+        
+        // Move product to output queue (triggers next machine!)
+        if (outputQueue != null) {
+            outputQueue.enqueue(product);
+        } else {
+            System.out.println("⚠️ " + id + " has no output queue - product discarded");
         }
-
+        
+        // Reset machine state
         this.currentProduct = null;
+        this.currentTask = null;
         this.color = defaultColor;
-        this.isReady = true;
-        notifyReady();
-    }
-
-    public String getStatus() {
-        if (!isReady) {
-            return "processing";
+        this.status = "idle";
+        this.ready = true;
+        
+        // TODO: Person 4 - Add WebSocket broadcast here
+        // wsService.broadcastMachineUpdate(this);
+        
+        // Check if more products waiting in input queue
+        if (inputQueue != null && !inputQueue.isEmpty()) {
+            inputQueue.notifyObservers();
         }
-        return "idle";
     }
-    public int serviceTime() {
-        return new Random().nextInt(5000) + 1000;
+    
+    
+    
+    // ========== HELPER METHODS ==========
+    
+    /**
+     * Generate random service time between 1-5 seconds
+     */
+    private int generateServiceTime() {
+        return new Random().nextInt(4000) + 1000;
+    }
+    
+    /**
+     * Get status for JSON serialization
+     */
+    public String getStatus() {
+        return status;
+    }
+    
+    /**
+     * Check if machine is ready
+     */
+    public boolean isReady() {
+        return ready;
     }
 }

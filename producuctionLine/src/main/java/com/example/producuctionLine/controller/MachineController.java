@@ -113,7 +113,7 @@ public class MachineController {
         }
         
         return ResponseEntity.ok(Map.of(
-            "id", machine.getName(),
+            "id", machine.getId(),
             "status", machine.getStatus(),
             "isReady", machine.isReady(),
             "color", machine.getColor(),
