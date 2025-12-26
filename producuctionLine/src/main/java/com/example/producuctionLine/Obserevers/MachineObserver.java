@@ -4,7 +4,5 @@ import com.example.producuctionLine.model.Machine;
 
 public interface MachineObserver {
     void onMachineReady(Machine machine);
-
-
-      void onProductAvailable(Queue queue);
+     void onProductAvailable(Queue queue);
 }
