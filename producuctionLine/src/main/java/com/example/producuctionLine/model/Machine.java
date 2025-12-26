@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
 
 @Data
 @NoArgsConstructor
-public class Machine implements MachineObserver {
+public class Machine implements MachineObserver,Runnable {
     
     // ========== IDENTIFICATION ==========
     private String name;              // M1, M2, etc. (for frontend)
@@ -41,6 +41,12 @@ public class Machine implements MachineObserver {
     
     @JsonIgnore
     private Queue outputQueue;      // Where products go to
+
+    @JsonIgnore
+    private volatile boolean isRunning = false;
+
+    @JsonIgnore
+    private Thread machineThread;
     
     /**
      * Constructor with position
@@ -76,27 +82,23 @@ public class Machine implements MachineObserver {
      * Process a product asynchronously
      */
     private void processProduct(Product product) {
-        // Update state
         this.ready = false;
         this.status = "processing";
         this.currentProduct = product;
         this.currentTask = product.getId();
         this.color = product.getColor();
-        
+
         System.out.println("⚙️ " + name + " started processing " + product.getId());
-        
-        // TODO: Person 4 - Add WebSocket broadcast here
-        // wsService.broadcastMachineUpdate(this);
-        
-        // // Process in background thread
-        // CompletableFuture.runAsync(() -> {
-        //     try {
-        //         Thread.sleep(serviceTime);
-        //         finishProcessing(product);
-        //     } catch (InterruptedException e) {
-        //         handleError(e);
-        //     }
-        // });
+
+        // UNCOMMENT THIS - Process in background thread
+        new Thread(() -> {
+            try {
+                Thread.sleep(serviceTime);
+                finishProcessing(product);
+            } catch (InterruptedException e) {
+                handleError(e);
+            }
+        }).start();
     }
     
     /**
@@ -152,4 +154,54 @@ public class Machine implements MachineObserver {
     public boolean isReady() {
         return ready;
     }
+
+
+    @Override
+    public void run() {
+        isRunning = true;
+        System.out.println("🏁 " + name + " thread started");
+
+        while (isRunning) {
+            try {
+                // Register to input queue if ready and idle
+                if (ready && inputQueue != null && !inputQueue.isEmpty()) {
+                    inputQueue.registerObserver(this);
+                }
+
+                Thread.sleep(100); // Check every 100ms
+
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                System.out.println("⏹️ " + name + " thread interrupted");
+                break;
+            }
+        }
+
+        System.out.println("🛑 " + name + " thread stopped");
+    }
+
+    public void stopThread() {
+        isRunning = false;
+        if (machineThread != null) {
+            machineThread.interrupt();
+        }
+    }
+
+
+    public void startThread() {
+        if (machineThread == null || !machineThread.isAlive()) {
+            machineThread = new Thread(this, name + "-Thread");
+            machineThread.start();
+        }
+    }
+
+
+    private void handleError(Exception e) {
+        System.err.println("❌ " + name + " error: " + e.getMessage());
+        this.status = "error";
+        this.ready = true;
+        this.currentProduct = null;
+        this.color = defaultColor;
+    }
+
 }
