@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 public class Machine implements MachineObserver {
     
     // ========== IDENTIFICATION ==========
-    private String Name;              // M1, M2, etc. (for frontend)
+    private String name;              // M1, M2, etc. (for frontend)
     private int machineNumber;      // 1, 2, 3 (numeric ID)
     
     // ========== POSITION ==========
@@ -46,7 +46,7 @@ public class Machine implements MachineObserver {
      * Constructor with position
      */
     public Machine(String id, int machineNumber, double x, double y) {
-        this.Name = id;
+        this.name = id;
         this.machineNumber = machineNumber;
         this.x = x;
         this.y = y;
@@ -83,7 +83,7 @@ public class Machine implements MachineObserver {
         this.currentTask = product.getId();
         this.color = product.getColor();
         
-        System.out.println("⚙️ " + Name + " started processing " + product.getId());
+        System.out.println("⚙️ " + name + " started processing " + product.getId());
         
         // TODO: Person 4 - Add WebSocket broadcast here
         // wsService.broadcastMachineUpdate(this);
@@ -103,13 +103,13 @@ public class Machine implements MachineObserver {
      * Finish processing and move product to output queue
      */
     private void finishProcessing(Product product) {
-        System.out.println("✅ " + Name + " finished processing " + product.getId());
+        System.out.println("✅ " + name + " finished processing " + product.getId());
         
         // Move product to output queue (triggers next machine!)
         if (outputQueue != null) {
             outputQueue.enqueue(product);
         } else {
-            System.out.println("⚠️ " + Name + " has no output queue - product discarded");
+            System.out.println("⚠️ " + name + " has no output queue - product discarded");
         }
         
         // Reset machine state
