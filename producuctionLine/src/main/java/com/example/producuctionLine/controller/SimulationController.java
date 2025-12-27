@@ -25,6 +25,9 @@ public class SimulationController {
     @PostMapping("/start")
     public ResponseEntity<?> startSimulation() {
         try {
+            // Ensure we are in normal mode (disable replay if it was active)
+            manager.disableReplayMode();
+
             manager.startSimulation();
             return ResponseEntity.ok(Map.of(
                     "status", "started",
