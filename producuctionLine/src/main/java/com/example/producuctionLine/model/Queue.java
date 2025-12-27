@@ -106,7 +106,4 @@ public class Queue implements Observable {
     public int getCurrentSize() {
         return size();
     }
-
-
-    
 }

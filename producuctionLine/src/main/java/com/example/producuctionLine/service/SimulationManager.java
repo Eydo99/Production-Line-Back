@@ -1,11 +1,12 @@
 package com.example.producuctionLine.service;
 
 import com.example.producuctionLine.dto.MachineUpdateDTO;
-import com.example.producuctionLine.dto.QueueUpdateDTO;
 import com.example.producuctionLine.model.Connection;
 import com.example.producuctionLine.model.Machine;
 import com.example.producuctionLine.model.Product;
 import com.example.producuctionLine.model.Queue;
+import lombok.Getter;
+import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -30,14 +31,34 @@ public class SimulationManager {
 
     // ========== WEBSOCKET BROADCASTER (PERSON 4) ==========
     @Autowired
-    private WebSocketBroadcaster broadcaster; // ✅ ADDED - Inject WebSocket broadcaster
+    private WebSocketBroadcaster broadcaster;
 
+    /**
+     * -- GETTER --
+     *  Check if simulation is running
+     */
     // ========== SIMULATION STATE ==========
+    @Getter
     private volatile boolean isRunning = false;
+    /**
+     * -- GETTER --
+     *  Check if simulation is paused
+     */
+    @Getter
     private volatile boolean isPaused = false;
 
+    /**
+     * -- GETTER --
+     *  Get all queues
+     */
     // ========== DATA COLLECTIONS (Thread-safe) ==========
+    @Getter
     private final Map<String, Queue> queues = new ConcurrentHashMap<>();
+    /**
+     * -- GETTER --
+     *  Get all machines
+     */
+    @Getter
     private final Map<String, Machine> machines = new ConcurrentHashMap<>();
     private final List<Connection> connections = new CopyOnWriteArrayList<>();
 
@@ -46,10 +67,22 @@ public class SimulationManager {
     private Thread productGeneratorThread;
     private final Map<String, Future<?>> machineFutures = new ConcurrentHashMap<>();
 
+    /**
+     * -- GETTER --
+     *  Get total products generated
+     */
     // ========== STATISTICS ==========
+    @Getter
     private int totalProductsGenerated = 0;
+    /**
+     * -- GETTER --
+     *  Get total products processed
+     */
+    @Getter
     private int totalProductsProcessed = 0;
     private long simulationStartTime = 0;
+    private long totalPausedTime = 0;
+    private long pauseStartTime = 0;
 
     // ========== COUNTERS ==========
     private int queueCounter = 0;
@@ -105,13 +138,6 @@ public class SimulationManager {
     }
 
     /**
-     * Get all queues
-     */
-    public Map<String, Queue> getQueues() {
-        return queues;
-    }
-
-    /**
      * Remove queue and clean up connections
      */
     public void removeQueue(String id) {
@@ -157,13 +183,6 @@ public class SimulationManager {
      */
     public Machine getMachine(String id) {
         return machines.get(id);
-    }
-
-    /**
-     * Get all machines
-     */
-    public Map<String, Machine> getMachines() {
-        return machines;
     }
 
     /**
@@ -334,10 +353,12 @@ public class SimulationManager {
             System.out.println("⚠️ Warning: No complete Q→M→Q path exists. Products may get stuck.");
         }
 
-        // Reset statistics
+        // Reset statistics AND pause counters ← ADD THIS SECTION
         totalProductsGenerated = 0;
         totalProductsProcessed = 0;
         simulationStartTime = System.currentTimeMillis();
+        totalPausedTime = 0;        // ← ADD THIS
+        pauseStartTime = 0;         // ← ADD THIS
 
         // Set running flag
         isRunning = true;
@@ -349,7 +370,7 @@ public class SimulationManager {
                 new ThreadFactory() {
                     private int counter = 0;
                     @Override
-                    public Thread newThread(Runnable r) {
+                    public Thread newThread(@NonNull Runnable r) {
                         Thread t = new Thread(r, "MachineThread-" + (++counter));
                         t.setDaemon(true);
                         return t;
@@ -365,7 +386,7 @@ public class SimulationManager {
         }
 
         // Start product generator thread
-        productGeneratorThread = new Thread(() -> runProductGenerator(), "ProductGenerator");
+        productGeneratorThread = new Thread(this::runProductGenerator, "ProductGenerator");
         productGeneratorThread.setDaemon(true);
         productGeneratorThread.start();
 
@@ -562,6 +583,8 @@ public class SimulationManager {
 
         // Set flag to stop all threads
         isRunning = false;
+        isPaused = false;           // ← Already there
+        pauseStartTime = 0;         // ← ADD THIS
 
         // Stop product generator
         if (productGeneratorThread != null && productGeneratorThread.isAlive()) {
@@ -614,7 +637,12 @@ public class SimulationManager {
         if (!isRunning) {
             throw new IllegalStateException("Cannot pause: Simulation is not running");
         }
+        if (isPaused) {
+            throw new IllegalStateException("Simulation is already paused");
+        }
+
         isPaused = true;
+        pauseStartTime = System.currentTimeMillis(); // ← Record when pause started
         System.out.println("⏸️  Simulation PAUSED");
     }
 
@@ -625,7 +653,18 @@ public class SimulationManager {
         if (!isRunning) {
             throw new IllegalStateException("Cannot resume: Simulation is not running");
         }
+        if (!isPaused) {
+            throw new IllegalStateException("Simulation is not paused");
+        }
+
         isPaused = false;
+
+        // ← Add the paused time to total
+        if (pauseStartTime > 0) {
+            totalPausedTime += (System.currentTimeMillis() - pauseStartTime);
+            pauseStartTime = 0;
+        }
+
         System.out.println("▶️  Simulation RESUMED");
     }
 
@@ -667,39 +706,22 @@ public class SimulationManager {
     // ========================================================================
 
     /**
-     * Check if simulation is running
-     */
-    public boolean isRunning() {
-        return isRunning;
-    }
-
-    /**
-     * Check if simulation is paused
-     */
-    public boolean isPaused() {
-        return isPaused;
-    }
-
-    /**
-     * Get total products generated
-     */
-    public int getTotalProductsGenerated() {
-        return totalProductsGenerated;
-    }
-
-    /**
-     * Get total products processed
-     */
-    public int getTotalProductsProcessed() {
-        return totalProductsProcessed;
-    }
-
-    /**
      * Get simulation duration in milliseconds
      */
     public long getSimulationDuration() {
         if (simulationStartTime == 0) return 0;
-        return System.currentTimeMillis() - simulationStartTime;
+
+        long currentTime = System.currentTimeMillis();
+        long totalElapsed = currentTime - simulationStartTime;
+
+        // If currently paused, add current pause duration
+        long currentPauseDuration = 0;
+        if (isPaused && pauseStartTime > 0) {
+            currentPauseDuration = currentTime - pauseStartTime;
+        }
+
+        // Subtract all paused time
+        return totalElapsed - totalPausedTime - currentPauseDuration;
     }
 
     /**
