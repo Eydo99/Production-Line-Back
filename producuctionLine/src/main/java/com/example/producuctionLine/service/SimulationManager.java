@@ -21,7 +21,6 @@ import java.util.concurrent.*;
  * Singleton class to manage entire simulation
  * Coordinates all queues, machines, and connections
  * Implements Concurrency Design Pattern and Memento Pattern (Originator role)
- *
  * Memento Pattern Participants:
  * - Originator: SimulationManager (this class) - creates and restores from
  * snapshots
@@ -990,7 +989,7 @@ else {
         queues.clear();
         machines.clear();
         connections.clear();
-        machineFutures.clear();
+        machineThreads.clear();
 
         // Restore counters
         queueCounter = snapshot.getQueueCounter();
