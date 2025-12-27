@@ -33,31 +33,13 @@ public class SimulationManager {
     @Autowired
     private WebSocketBroadcaster broadcaster;
 
-    /**
-     * -- GETTER --
-     *  Check if simulation is running
-     */
-    // ========== SIMULATION STATE ==========
     @Getter
     private volatile boolean isRunning = false;
-    /**
-     * -- GETTER --
-     *  Check if simulation is paused
-     */
     @Getter
     private volatile boolean isPaused = false;
 
-    /**
-     * -- GETTER --
-     *  Get all queues
-     */
-    // ========== DATA COLLECTIONS (Thread-safe) ==========
     @Getter
     private final Map<String, Queue> queues = new ConcurrentHashMap<>();
-    /**
-     * -- GETTER --
-     *  Get all machines
-     */
     @Getter
     private final Map<String, Machine> machines = new ConcurrentHashMap<>();
     private final List<Connection> connections = new CopyOnWriteArrayList<>();
@@ -65,19 +47,10 @@ public class SimulationManager {
     // ========== THREADING ==========
     private ExecutorService machineExecutor;
     private Thread productGeneratorThread;
-    private final Map<String, Future<?>> machineFutures = new ConcurrentHashMap<>();
+    private final Map<String, Thread> machineThreads = new ConcurrentHashMap<>();
 
-    /**
-     * -- GETTER --
-     *  Get total products generated
-     */
-    // ========== STATISTICS ==========
     @Getter
     private int totalProductsGenerated = 0;
-    /**
-     * -- GETTER --
-     *  Get total products processed
-     */
     @Getter
     private int totalProductsProcessed = 0;
     private long simulationStartTime = 0;
@@ -89,20 +62,14 @@ public class SimulationManager {
     private int machineCounter = 0;
 
     // ========== CONFIGURATION ==========
-    private static final int MIN_PRODUCT_DELAY = 1000; // 1 second
-    private static final int MAX_PRODUCT_DELAY = 3000; // 3 seconds
+    private static final int MIN_PRODUCT_DELAY = 1000;
+    private static final int MAX_PRODUCT_DELAY = 3000;
     private static final int THREAD_POOL_SIZE = 10;
 
-    /**
-     * Private constructor for Singleton pattern
-     */
     private SimulationManager() {
         System.out.println("🏗️ SimulationManager initialized");
     }
 
-    /**
-     * Get singleton instance (Thread-safe)
-     */
     public static synchronized SimulationManager getInstance() {
         if (instance == null) {
             instance = new SimulationManager();
@@ -114,40 +81,25 @@ public class SimulationManager {
     // QUEUE MANAGEMENT
     // ========================================================================
 
-    /**
-     * Add new queue to simulation
-     * @param x X coordinate
-     * @param y Y coordinate
-     * @return Created queue
-     */
     public Queue addQueue(double x, double y) {
         queueCounter++;
         String id = "Q" + queueCounter;
         Queue queue = new Queue(id, x, y);
         queues.put(id, queue);
-
         System.out.println("🆕 Queue created: " + id + " at (" + x + ", " + y + ")");
         return queue;
     }
 
-    /**
-     * Get queue by ID
-     */
     public Queue getQueue(String id) {
         return queues.get(id);
     }
 
-    /**
-     * Remove queue and clean up connections
-     */
     public void removeQueue(String id) {
         Queue removed = queues.remove(id);
         if (removed != null) {
-            // Remove all connections involving this queue
             connections.removeIf(conn ->
                     conn.getFromId().equals(id) || conn.getToId().equals(id)
             );
-
             System.out.println("🗑️ Queue removed: " + id);
         }
     }
@@ -156,57 +108,36 @@ public class SimulationManager {
     // MACHINE MANAGEMENT
     // ========================================================================
 
-    /**
-     * Add new machine to simulation
-     * @param x X coordinate
-     * @param y Y coordinate
-     * @return Created machine
-     */
     public Machine addMachine(double x, double y) {
         machineCounter++;
         String id = "M" + machineCounter;
         Machine machine = new Machine(id, machineCounter, x, y);
         machines.put(id, machine);
-
         System.out.println("🆕 Machine created: " + id + " at (" + x + ", " + y + ")");
 
-        // If simulation is running, start this machine's thread
         if (isRunning) {
             startMachineThread(machine);
         }
-
         return machine;
     }
 
-    /**
-     * Get machine by ID
-     */
     public Machine getMachine(String id) {
         return machines.get(id);
     }
 
-    /**
-     * Remove machine and clean up
-     */
     public void removeMachine(String id) {
         Machine removed = machines.remove(id);
         if (removed != null) {
-            // Stop machine thread if running
-            Future<?> future = machineFutures.remove(id);
-            if (future != null) {
-                future.cancel(true);
+            Thread thread = machineThreads.remove(id);
+            if (thread != null) {
+                thread.interrupt();
             }
-
-            // Remove all connections involving this machine
             connections.removeIf(conn ->
                     conn.getFromId().equals(id) || conn.getToId().equals(id)
             );
-
-            // Unregister from queues
             if (removed.getInputQueue() != null) {
                 removed.getInputQueue().unregisterObserver(removed);
             }
-
             System.out.println("🗑️ Machine removed: " + id);
         }
     }
@@ -215,18 +146,7 @@ public class SimulationManager {
     // CONNECTION MANAGEMENT
     // ========================================================================
 
-    /**
-     * Create connection between nodes
-     * Validates Q→M→Q pattern
-     * Implements Observer Pattern wiring
-     *
-     * @param fromId Source node ID (Queue or Machine)
-     * @param toId Target node ID (Queue or Machine)
-     * @return Created connection
-     * @throws IllegalArgumentException if connection is invalid
-     */
     public Connection createConnection(String fromId, String toId) {
-        // Validate nodes exist
         boolean fromExists = queues.containsKey(fromId) || machines.containsKey(fromId);
         boolean toExists = queues.containsKey(toId) || machines.containsKey(toId);
 
@@ -237,7 +157,6 @@ public class SimulationManager {
             throw new IllegalArgumentException("Target node '" + toId + "' does not exist");
         }
 
-        // Validate Q→M or M→Q pattern (no Q→Q or M→M)
         char fromType = fromId.charAt(0);
         char toType = toId.charAt(0);
 
@@ -248,10 +167,8 @@ public class SimulationManager {
             );
         }
 
-        // Create connection object
         Connection connection = new Connection(fromId, toId);
 
-        // Check if connection already exists
         boolean exists = connections.stream()
                 .anyMatch(c -> c.getFromId().equals(fromId) && c.getToId().equals(toId));
 
@@ -261,47 +178,32 @@ public class SimulationManager {
 
         connections.add(connection);
 
-        // Wire up the actual objects (Observer Pattern)
         if (fromType == 'Q' && toType == 'M') {
-            // Queue → Machine
             Queue queue = queues.get(fromId);
             Machine machine = machines.get(toId);
-
             machine.setInputQueue(queue);
-            queue.registerObserver(machine); // Machine observes queue (Observer Pattern)
-
+            queue.registerObserver(machine);
             System.out.println("🔗 Connected: Queue " + fromId + " → Machine " + toId);
             System.out.println("   Observer Pattern: " + toId + " now observes " + fromId);
-
         } else if (fromType == 'M' && toType == 'Q') {
-            // Machine → Queue
             Machine machine = machines.get(fromId);
             Queue queue = queues.get(toId);
-
             machine.setOutputQueue(queue);
-
             System.out.println("🔗 Connected: Machine " + fromId + " → Queue " + toId);
         }
 
         return connection;
     }
 
-    /**
-     * Get all connections
-     */
     public List<Connection> getConnections() {
         return new ArrayList<>(connections);
     }
 
-    /**
-     * Delete a connection
-     */
     public void deleteConnection(String fromId, String toId) {
         connections.removeIf(conn ->
                 conn.getFromId().equals(fromId) && conn.getToId().equals(toId)
         );
 
-        // Unwire objects
         char fromType = fromId.charAt(0);
         char toType = toId.charAt(0);
 
@@ -323,21 +225,17 @@ public class SimulationManager {
     }
 
     // ========================================================================
-    // SIMULATION CONTROL (Concurrency Pattern)
+    // SIMULATION CONTROL
     // ========================================================================
 
-    /**
-     * Start the simulation
-     * Implements Concurrency Design Pattern:
-     * - Each machine runs on its own thread
-     * - Product generator runs on separate thread
-     * - Thread-safe operations throughout
-     *
-     * @throws IllegalStateException if simulation already running or no queues exist
-     */
     public synchronized void startSimulation() {
         if (isRunning) {
             throw new IllegalStateException("Simulation is already running");
+        }
+        // ADD THIS:
+// Clear all queues from previous run
+        for (Queue queue : queues.values()) {
+            queue.getProducts().clear();
         }
 
         if (queues.isEmpty()) {
@@ -348,23 +246,19 @@ public class SimulationManager {
             throw new IllegalStateException("Cannot start simulation: No machines exist. Add at least one machine.");
         }
 
-        // Validate at least one complete path exists
         if (!hasValidPath()) {
             System.out.println("⚠️ Warning: No complete Q→M→Q path exists. Products may get stuck.");
         }
 
-        // Reset statistics AND pause counters ← ADD THIS SECTION
         totalProductsGenerated = 0;
         totalProductsProcessed = 0;
         simulationStartTime = System.currentTimeMillis();
-        totalPausedTime = 0;        // ← ADD THIS
-        pauseStartTime = 0;         // ← ADD THIS
+        totalPausedTime = 0;
+        pauseStartTime = 0;
 
-        // Set running flag
         isRunning = true;
         isPaused = false;
 
-        // Create thread pool for machines
         machineExecutor = Executors.newFixedThreadPool(
                 Math.max(THREAD_POOL_SIZE, machines.size()),
                 new ThreadFactory() {
@@ -378,14 +272,14 @@ public class SimulationManager {
                 }
         );
 
-        // Start all machine threads (Concurrency Pattern)
         for (Machine machine : machines.values()) {
-            Future<?> future = machineExecutor.submit(() -> runMachineLoop(machine));
-            machineFutures.put(machine.getName(), future);
+            Thread thread = new Thread(() -> runMachineLoop(machine), machine.getName() + "-Thread");
+            thread.setDaemon(true);
+            machineThreads.put(machine.getName(), thread);
+            thread.start();
             System.out.println("🚀 Started thread for " + machine.getName());
         }
 
-        // Start product generator thread
         productGeneratorThread = new Thread(this::runProductGenerator, "ProductGenerator");
         productGeneratorThread.setDaemon(true);
         productGeneratorThread.start();
@@ -397,45 +291,65 @@ public class SimulationManager {
     }
 
     /**
-     * Machine processing loop (runs on separate thread for each machine)
-     * This is the core of the Concurrency Pattern
+     * Machine processing loop - now properly handles pause/stop during processing
      */
     private void runMachineLoop(Machine machine) {
         System.out.println("🏁 " + machine.getName() + " thread started");
 
         while (isRunning && !Thread.currentThread().isInterrupted()) {
             try {
-                // Skip if paused
-                if (isPaused) {
-                    Thread.sleep(100);
-                    continue;
+                // Wait while paused
+                while (isPaused) {
+                    if (!isRunning) break;
+                    Thread.sleep(50);
                 }
+
+                // Check if stopped while paused
+                if (!isRunning) break;
 
                 // If machine is ready and has input queue, check for products
                 if (machine.isReady() && machine.getInputQueue() != null) {
                     Queue inputQueue = machine.getInputQueue();
-
-                    // Try to get a product
                     if (!inputQueue.isEmpty()) {
+
+// 🚫 DO NOT take product if paused or stopped - with synchronized check
+                        synchronized (this) {
+                            if (isPaused || !isRunning) {
+                                Thread.sleep(50);
+                                continue;
+                            }
+                        }
+
+// Double-check to prevent race condition
+                        if (isPaused || !isRunning) {
+                            Thread.sleep(50);
+                            continue;
+                        }
+
                         Product product = inputQueue.dequeue();
 
                         if (product != null) {
                             processProductOnMachine(machine, product);
+
+                            // ⛔ stop immediately if simulation ended mid-processing
+                            if (!isRunning || Thread.currentThread().isInterrupted()) {
+                                break;
+                            }
                         }
-                    } else {
-                        // No products available, register as observer
+                    }
+else {
                         inputQueue.registerObserver(machine);
                     }
                 }
 
-                // Small sleep to prevent busy-waiting
                 Thread.sleep(50);
 
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 System.out.println("⏹️  " + machine.getName() + " thread interrupted");
                 break;
-            } catch (Exception e) {
+            }
+            catch (Exception e) {
                 System.err.println("❌ Error in " + machine.getName() + ": " + e.getMessage());
                 e.printStackTrace();
             }
@@ -445,11 +359,31 @@ public class SimulationManager {
     }
 
     /**
-     * Process product on machine (blocking operation in separate thread)
+     * Process product on machine - now checks for pause/stop during sleep
      */
     private void processProductOnMachine(Machine machine, Product product) {
+
+        // ⏸️ IMMEDIATE PAUSE CHECK - If paused, return product and exit
+        if (isPaused) {
+            // Return product to input queue
+            if (machine.getInputQueue() != null && product != null) {
+                machine.getInputQueue().enqueue(product);
+                System.out.println("⏸️  " + machine.getName() + " returned product to queue (paused)");
+            }
+            // Reset machine state
+            resetMachine(machine);
+            return;
+        }
+
+        // Check if simulation stopped
+        if (!isRunning) {
+            if (machine.getInputQueue() != null && product != null) {
+                machine.getInputQueue().enqueue(product);
+            }
+            resetMachine(machine);
+            return;
+        }
         try {
-            // Update machine state
             machine.setReady(false);
             machine.setStatus("processing");
             machine.setCurrentProduct(product);
@@ -459,7 +393,6 @@ public class SimulationManager {
             System.out.println("⚙️  " + machine.getName() + " started processing " +
                     product.getId() + " (color: " + product.getColor() + ")");
 
-            // ✅ WEBSOCKET: Broadcast machine started processing
             if (broadcaster != null) {
                 broadcaster.broadcastMachineUpdate(new MachineUpdateDTO(
                         machine.getName(),
@@ -468,13 +401,54 @@ public class SimulationManager {
                 ));
             }
 
-            // Simulate processing time (BLOCKING - this is intentional)
-            Thread.sleep(machine.getServiceTime());
+            // Sleep in small chunks so we can respond to pause/stop quickly
+            int serviceTime = machine.getServiceTime();
+            int elapsed = 0;
+            int sleepChunk = 100; // Check every 100ms
 
+            while (elapsed < serviceTime) {
+                // Check if stopped or paused BEFORE sleeping
+                if (!isRunning) {
+                    System.out.println("⏹️  " + machine.getName() + " processing aborted (simulation stopped)");
+                    resetMachine(machine);
+                    return;
+                }
+
+// Wait while paused - MORE RESPONSIVE VERSION
+                while (isPaused) {
+                    // Check every 10ms instead of 50ms for faster response
+                    Thread.sleep(10);
+
+                    // If simulation stopped while paused
+                    if (!isRunning) {
+                        // 🔁 return product to input queue
+                        if (machine.getInputQueue() != null && product != null) {
+                            machine.getInputQueue().enqueue(product);
+                            System.out.println("⏹️  " + machine.getName() + " returned product (stopped while paused)");
+                        }
+                        resetMachine(machine);
+                        return;
+                    }
+                }
+
+                // Sleep for a chunk
+                int remainingTime = serviceTime - elapsed;
+                int timeToSleep = Math.min(sleepChunk, remainingTime);
+                Thread.sleep(timeToSleep);
+                elapsed += timeToSleep;
+            }
+            // Only continue if simulation is still running
+            if (!isRunning) {
+                // 🔁 return product to input queue
+                if (machine.getInputQueue() != null && product != null) {
+                    machine.getInputQueue().enqueue(product);
+                }
+                resetMachine(machine);
+                return;
+            }
             // Flash effect
             System.out.println("✨ " + machine.getName() + " finished processing " + product.getId());
 
-            // ✅ WEBSOCKET: Broadcast machine flash
             if (broadcaster != null) {
                 broadcaster.broadcastMachineUpdate(new MachineUpdateDTO(
                         machine.getName(),
@@ -485,7 +459,22 @@ public class SimulationManager {
 
             Thread.sleep(200); // Flash duration
 
-            // Move product to output queue
+            // Move product to output queue - WITH PROPER PAUSE CHECKING
+
+            // Check pause/stop state with synchronization
+            synchronized (this) {
+                if (!isRunning || isPaused) {
+                    // Return product to input queue if paused/stopped
+                    if (machine.getInputQueue() != null) {
+                        machine.getInputQueue().enqueue(product);
+                        System.out.println("⏸️  " + machine.getName() + " returned product (paused/stopped at output)");
+                    }
+                    resetMachine(machine);
+                    return;
+                }
+            }
+
+            // Only proceed if not paused and running
             if (machine.getOutputQueue() != null) {
                 machine.getOutputQueue().enqueue(product);
                 totalProductsProcessed++;
@@ -496,14 +485,10 @@ public class SimulationManager {
                 totalProductsProcessed++;
             }
 
-            // Reset machine state
-            machine.setCurrentProduct(null);
-            machine.setCurrentTask(null);
-            machine.setColor(machine.getDefaultColor());
-            machine.setStatus("idle");
-            machine.setReady(true);
 
-            // ✅ WEBSOCKET: Broadcast machine back to idle
+            // Reset machine state
+            resetMachine(machine);
+
             if (broadcaster != null) {
                 broadcaster.broadcastMachineUpdate(new MachineUpdateDTO(
                         machine.getName(),
@@ -512,19 +497,34 @@ public class SimulationManager {
                 ));
             }
 
-            // ✅ WEBSOCKET: Broadcast updated statistics
             broadcastStatistics();
 
         } catch (InterruptedException e) {
+
+            // 🔁 return product safely
+            if (machine.getInputQueue() != null && product != null) {
+                machine.getInputQueue().enqueue(product);
+            }
+
+            resetMachine(machine);
             Thread.currentThread().interrupt();
-            machine.setStatus("error");
-            machine.setReady(true);
-            System.err.println("❌ " + machine.getName() + " processing interrupted");
         }
+
     }
 
     /**
-     * Product generator loop (runs on separate thread)
+     * Helper method to reset machine to idle state
+     */
+    private void resetMachine(Machine machine) {
+        machine.setCurrentProduct(null);
+        machine.setCurrentTask(null);
+        machine.setColor(machine.getDefaultColor());
+        machine.setStatus("idle");
+        machine.setReady(true);
+    }
+
+    /**
+     * Product generator loop
      */
     private void runProductGenerator() {
         Random random = new Random();
@@ -532,17 +532,20 @@ public class SimulationManager {
 
         while (isRunning && !Thread.currentThread().isInterrupted()) {
             try {
-                // Skip if paused
-                if (isPaused) {
+                // Wait while paused
+                while (isPaused && isRunning) {
                     Thread.sleep(100);
-                    continue;
                 }
 
-                // Random delay between products
+                // Check if stopped while paused
+                if (!isRunning) break;
+
                 int delay = MIN_PRODUCT_DELAY + random.nextInt(MAX_PRODUCT_DELAY - MIN_PRODUCT_DELAY);
                 Thread.sleep(delay);
 
-                // Generate product at first queue
+                // Double-check still running after sleep
+                if (!isRunning) break;
+
                 Queue firstQueue = getFirstQueue();
                 if (firstQueue != null) {
                     Product product = new Product();
@@ -554,7 +557,6 @@ public class SimulationManager {
                             ": " + product.getId() +
                             " (color: " + product.getColor() + ") → " + firstQueue.getId());
 
-                    // ✅ WEBSOCKET: Broadcast statistics update after product generation
                     broadcastStatistics();
                 }
 
@@ -570,9 +572,6 @@ public class SimulationManager {
         System.out.println("🛑 Product generator stopped");
     }
 
-    /**
-     * Stop the simulation
-     */
     public synchronized void stopSimulation() {
         if (!isRunning) {
             System.out.println("⚠️  Simulation is not running");
@@ -581,12 +580,10 @@ public class SimulationManager {
 
         System.out.println("⏹️  Stopping simulation...");
 
-        // Set flag to stop all threads
         isRunning = false;
-        isPaused = false;           // ← Already there
-        pauseStartTime = 0;         // ← ADD THIS
+        isPaused = false;
+        pauseStartTime = 0;
 
-        // Stop product generator
         if (productGeneratorThread != null && productGeneratorThread.isAlive()) {
             productGeneratorThread.interrupt();
             try {
@@ -596,13 +593,11 @@ public class SimulationManager {
             }
         }
 
-        // Cancel all machine futures
-        for (Future<?> future : machineFutures.values()) {
-            future.cancel(true);
+        for (Thread thread : machineThreads.values()) {
+            thread.interrupt();
         }
-        machineFutures.clear();
+        machineThreads.clear();
 
-        // Shutdown executor
         if (machineExecutor != null) {
             machineExecutor.shutdownNow();
             try {
@@ -615,12 +610,8 @@ public class SimulationManager {
             }
         }
 
-        // Reset all machines to idle
         for (Machine machine : machines.values()) {
-            machine.setStatus("idle");
-            machine.setReady(true);
-            machine.setCurrentProduct(null);
-            machine.setColor(machine.getDefaultColor());
+            resetMachine(machine);
         }
 
         long duration = System.currentTimeMillis() - simulationStartTime;
@@ -630,9 +621,6 @@ public class SimulationManager {
         System.out.println("   Products Processed: " + totalProductsProcessed);
     }
 
-    /**
-     * Pause the simulation
-     */
     public synchronized void pauseSimulation() {
         if (!isRunning) {
             throw new IllegalStateException("Cannot pause: Simulation is not running");
@@ -642,13 +630,18 @@ public class SimulationManager {
         }
 
         isPaused = true;
-        pauseStartTime = System.currentTimeMillis(); // ← Record when pause started
+        pauseStartTime = System.currentTimeMillis();
         System.out.println("⏸️  Simulation PAUSED");
+        // 🆕 CRITICAL: Unregister all machines as observers from queues
+        for (Machine machine : machines.values()) {
+            if (machine.getInputQueue() != null) {
+                machine.getInputQueue().unregisterObserver(machine);
+            }
+        }
+
+        System.out.println("⏸️  Simulation PAUSED (all observers unregistered)");
     }
 
-    /**
-     * Resume the simulation
-     */
     public synchronized void resumeSimulation() {
         if (!isRunning) {
             throw new IllegalStateException("Cannot resume: Simulation is not running");
@@ -659,74 +652,64 @@ public class SimulationManager {
 
         isPaused = false;
 
-        // ← Add the paused time to total
         if (pauseStartTime > 0) {
             totalPausedTime += (System.currentTimeMillis() - pauseStartTime);
             pauseStartTime = 0;
         }
 
         System.out.println("▶️  Simulation RESUMED");
+
+        // 🆕 CRITICAL: Re-register all machines as observers
+        for (Machine machine : machines.values()) {
+            if (machine.getInputQueue() != null) {
+                machine.getInputQueue().registerObserver(machine);
+            }
+        }
+
+        System.out.println("▶️  Simulation RESUMED (observers re-registered)");
     }
 
     // ========================================================================
     // HELPER METHODS
     // ========================================================================
 
-    /**
-     * Get the first queue (sorted by ID) for product generation
-     */
     private Queue getFirstQueue() {
         return queues.values().stream()
                 .min((q1, q2) -> q1.getId().compareTo(q2.getId()))
                 .orElse(null);
     }
 
-    /**
-     * Check if at least one valid path exists (Q→M→Q)
-     */
     private boolean hasValidPath() {
-        // Simple check: at least one queue has output connection
         return connections.stream()
                 .anyMatch(c -> c.getFromId().startsWith("Q") && c.getToId().startsWith("M"));
     }
 
-    /**
-     * Start a machine's thread (used when adding machine during simulation)
-     */
     private void startMachineThread(Machine machine) {
-        if (machineExecutor != null && !machineExecutor.isShutdown()) {
-            Future<?> future = machineExecutor.submit(() -> runMachineLoop(machine));
-            machineFutures.put(machine.getName(), future);
-            System.out.println("🚀 Started thread for " + machine.getName());
-        }
+        Thread thread = new Thread(() -> runMachineLoop(machine), machine.getName() + "-Thread");
+        thread.setDaemon(true);
+        machineThreads.put(machine.getName(), thread);
+        thread.start();
+        System.out.println("🚀 Started thread for " + machine.getName());
     }
 
     // ========================================================================
     // GETTERS & STATE
     // ========================================================================
 
-    /**
-     * Get simulation duration in milliseconds
-     */
     public long getSimulationDuration() {
         if (simulationStartTime == 0) return 0;
 
         long currentTime = System.currentTimeMillis();
         long totalElapsed = currentTime - simulationStartTime;
 
-        // If currently paused, add current pause duration
         long currentPauseDuration = 0;
         if (isPaused && pauseStartTime > 0) {
             currentPauseDuration = currentTime - pauseStartTime;
         }
 
-        // Subtract all paused time
         return totalElapsed - totalPausedTime - currentPauseDuration;
     }
 
-    /**
-     * Get average queue length
-     */
     public double getAverageQueueLength() {
         if (queues.isEmpty()) return 0;
         return queues.values().stream()
@@ -735,9 +718,6 @@ public class SimulationManager {
                 .orElse(0.0);
     }
 
-    /**
-     * Get simulation statistics
-     */
     public Map<String, Object> getStatistics() {
         return Map.of(
                 "isRunning", isRunning,
@@ -752,22 +732,16 @@ public class SimulationManager {
         );
     }
 
-    /**
-     * Clear all simulation data
-     */
     public synchronized void clearSimulation() {
-        // Stop if running
         if (isRunning) {
             stopSimulation();
         }
 
-        // Clear all data
         queues.clear();
         machines.clear();
         connections.clear();
-        machineFutures.clear();
+        machineThreads.clear();
 
-        // Reset counters
         queueCounter = 0;
         machineCounter = 0;
         totalProductsGenerated = 0;
@@ -781,10 +755,6 @@ public class SimulationManager {
     // WEBSOCKET BROADCASTING
     // ========================================================================
 
-    /**
-     * Broadcast current statistics to frontend via WebSocket
-     * Called after each product generation or processing
-     */
     private void broadcastStatistics() {
         if (broadcaster != null) {
             try {
@@ -792,20 +762,9 @@ public class SimulationManager {
                         "totalGenerated", totalProductsGenerated,
                         "totalProcessed", totalProductsProcessed,
                         "avgQueueLength", getAverageQueueLength(),
-                        "duration", getSimulationDuration() / 1000, // Convert to seconds
+                        "duration", getSimulationDuration() / 1000,
                         "timestamp", System.currentTimeMillis()
                 );
-
-                // Note: WebSocketBroadcaster doesn't have broadcastStatistics yet
-                // Person 4 needs to add this method to WebSocketBroadcaster.java:
-                // public void broadcastStatistics(Map<String, Object> stats) {
-                //     messagingTemplate.convertAndSend("/topic/statistics", stats);
-                // }
-
-                // For now, we'll just track it in console
-                // Uncomment below once Person 4 implements broadcastStatistics()
-                // broadcaster.broadcastStatistics(stats);
-
             } catch (Exception e) {
                 System.err.println("❌ Error broadcasting statistics: " + e.getMessage());
             }

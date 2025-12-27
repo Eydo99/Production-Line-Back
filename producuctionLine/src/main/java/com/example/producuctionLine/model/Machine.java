@@ -180,21 +180,6 @@ public class Machine implements MachineObserver,Runnable {
         System.out.println("🛑 " + name + " thread stopped");
     }
 
-    public void stopThread() {
-        isRunning = false;
-        if (machineThread != null) {
-            machineThread.interrupt();
-        }
-    }
-
-
-    public void startThread() {
-        if (machineThread == null || !machineThread.isAlive()) {
-            machineThread = new Thread(this, name + "-Thread");
-            machineThread.start();
-        }
-    }
-
 
     private void handleError(Exception e) {
         System.err.println("❌ " + name + " error: " + e.getMessage());
