@@ -110,6 +110,12 @@ public class SimulationManager implements SimulationOriginator {
     // Note: Snapshots are now stored in the Caretaker (ArrayList history)
     // The Caretaker is injected via @Autowired above
 
+    // ========== REPLAY MODE (Deterministic Replay) ==========
+    private boolean isReplayMode = false;
+    private List<ProductSnapshot> productsToReplay = new ArrayList<>();
+    private int replayIndex = 0;
+    private final List<ProductSnapshot> recordedProducts = new ArrayList<>();
+
     /**
      * Private constructor for Singleton pattern
      */
@@ -313,7 +319,7 @@ public class SimulationManager implements SimulationOriginator {
             throw new IllegalStateException("Simulation is already running");
         }
         // ADD THIS:
-// Clear all queues from previous run
+        // Clear all queues from previous run
         for (Queue queue : queues.values()) {
             queue.getProducts().clear();
         }
@@ -335,6 +341,12 @@ public class SimulationManager implements SimulationOriginator {
         simulationStartTime = System.currentTimeMillis();
         totalPausedTime = 0; // ← ADD THIS
         pauseStartTime = 0; // ← ADD THIS
+
+        // Reset replay mode and clear recorded products for new simulation
+        if (!isReplayMode) {
+            recordedProducts.clear();
+            replayIndex = 0;
+        }
 
         isRunning = true;
         isPaused = false;
@@ -380,19 +392,21 @@ public class SimulationManager implements SimulationOriginator {
             try {
                 // Wait while paused
                 while (isPaused) {
-                    if (!isRunning) break;
+                    if (!isRunning)
+                        break;
                     Thread.sleep(50);
                 }
 
                 // Check if stopped while paused
-                if (!isRunning) break;
+                if (!isRunning)
+                    break;
 
                 // If machine is ready and has input queue, check for products
                 if (machine.isReady() && machine.getInputQueue() != null) {
                     Queue inputQueue = machine.getInputQueue();
                     if (!inputQueue.isEmpty()) {
 
-// 🚫 DO NOT take product if paused or stopped - with synchronized check
+                        // 🚫 DO NOT take product if paused or stopped - with synchronized check
                         synchronized (this) {
                             if (isPaused || !isRunning) {
                                 Thread.sleep(50);
@@ -400,7 +414,7 @@ public class SimulationManager implements SimulationOriginator {
                             }
                         }
 
-// Double-check to prevent race condition
+                        // Double-check to prevent race condition
                         if (isPaused || !isRunning) {
                             Thread.sleep(50);
                             continue;
@@ -416,8 +430,7 @@ public class SimulationManager implements SimulationOriginator {
                                 break;
                             }
                         }
-                    }
-else {
+                    } else {
                         inputQueue.registerObserver(machine);
                     }
                 }
@@ -428,8 +441,7 @@ else {
                 Thread.currentThread().interrupt();
                 System.out.println("⏹️  " + machine.getName() + " thread interrupted");
                 break;
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 System.err.println("❌ Error in " + machine.getName() + ": " + e.getMessage());
                 e.printStackTrace();
             }
@@ -493,7 +505,7 @@ else {
                     return;
                 }
 
-// Wait while paused - MORE RESPONSIVE VERSION
+                // Wait while paused - MORE RESPONSIVE VERSION
                 while (isPaused) {
                     // Check every 10ms instead of 50ms for faster response
                     Thread.sleep(10);
@@ -563,7 +575,6 @@ else {
                 totalProductsProcessed++;
             }
 
-
             // Reset machine state
             resetMachine(machine);
 
@@ -602,10 +613,12 @@ else {
 
     /**
      * Product generator loop
+     * In replay mode: replays recorded products
+     * In normal mode: generates new random products and records them
      */
     private void runProductGenerator() {
         Random random = new Random();
-        System.out.println("🏭 Product generator started");
+        System.out.println("🏭 Product generator started (replay mode: " + isReplayMode + ")");
 
         while (isRunning && !Thread.currentThread().isInterrupted()) {
             try {
@@ -615,18 +628,69 @@ else {
                 }
 
                 // Check if stopped while paused
-                if (!isRunning) break;
-
-                int delay = MIN_PRODUCT_DELAY + random.nextInt(MAX_PRODUCT_DELAY - MIN_PRODUCT_DELAY);
-                Thread.sleep(delay);
-
-                // Double-check still running after sleep
-                if (!isRunning) break;
+                if (!isRunning)
+                    break;
 
                 Queue firstQueue = getFirstQueue();
-                if (firstQueue != null) {
+                if (firstQueue == null) {
+                    Thread.sleep(100);
+                    continue;
+                }
+
+                if (isReplayMode) {
+                    // REPLAY MODE: Use recorded products
+                    if (replayIndex < productsToReplay.size()) {
+                        ProductSnapshot ps = productsToReplay.get(replayIndex);
+
+                        // Calculate delay based on createdAt timestamp (relative timing)
+                        long delay;
+                        if (replayIndex == 0) {
+                            delay = ps.getCreatedAt(); // First product's delay is its createdAt value
+                        } else {
+                            // Delay is the difference from previous product
+                            delay = ps.getCreatedAt() - productsToReplay.get(replayIndex - 1).getCreatedAt();
+                        }
+
+                        if (delay > 0) {
+                            Thread.sleep(delay);
+                        }
+
+                        if (!isRunning)
+                            break;
+
+                        // Create product with recorded values
+                        Product product = new Product();
+                        product.setId(ps.getId());
+                        product.setColor(ps.getColor());
+
+                        totalProductsGenerated++;
+                        replayIndex++;
+
+                        firstQueue.enqueue(product);
+
+                        System.out.println("🔁 Replayed product #" + totalProductsGenerated +
+                                ": " + product.getId() +
+                                " (color: " + product.getColor() + ") → " + firstQueue.getId());
+
+                        broadcastStatistics();
+                    } else {
+                        // All products replayed, wait for simulation to end
+                        Thread.sleep(100);
+                    }
+                } else {
+                    // NORMAL MODE: Generate new random products and record them
+                    int delay = MIN_PRODUCT_DELAY + random.nextInt(MAX_PRODUCT_DELAY - MIN_PRODUCT_DELAY);
+                    Thread.sleep(delay);
+
+                    if (!isRunning)
+                        break;
+
                     Product product = new Product();
                     totalProductsGenerated++;
+
+                    // Record product for future replay (store relative time from start)
+                    long relativeTime = System.currentTimeMillis() - simulationStartTime;
+                    recordedProducts.add(new ProductSnapshot(product.getId(), product.getColor(), relativeTime));
 
                     firstQueue.enqueue(product);
 
@@ -955,6 +1019,13 @@ else {
         snapshot.setTotalProductsGenerated(totalProductsGenerated);
         snapshot.setTotalProductsProcessed(totalProductsProcessed);
 
+        // Capture simulation duration for replay
+        snapshot.setSimulationDuration(getSimulationDuration());
+
+        // Capture recorded products for deterministic replay
+        snapshot.setGeneratedProductsRecord(new ArrayList<>(recordedProducts));
+        System.out.println("   Recorded products: " + recordedProducts.size());
+
         // Store snapshot in Caretaker (ArrayList history)
         caretaker.saveSnapshot(snapshot);
 
@@ -990,7 +1061,7 @@ else {
         queues.clear();
         machines.clear();
         connections.clear();
-        machineFutures.clear();
+        machineThreads.clear();
 
         // Restore counters
         queueCounter = snapshot.getQueueCounter();
@@ -1100,5 +1171,28 @@ else {
      */
     public SimulationCaretaker getCaretaker() {
         return caretaker;
+    }
+
+    /**
+     * Set up replay mode with products from a snapshot
+     * Must be called before startSimulation() for deterministic replay
+     * 
+     * @param snapshot The snapshot containing recorded products
+     */
+    public void setupReplayMode(SimulationSnapshot snapshot) {
+        this.isReplayMode = true;
+        this.productsToReplay = new ArrayList<>(snapshot.getGeneratedProductsRecord());
+        this.replayIndex = 0;
+        System.out.println("🔁 Replay mode enabled with " + productsToReplay.size() + " recorded products");
+    }
+
+    /**
+     * Disable replay mode (for normal simulation)
+     */
+    public void disableReplayMode() {
+        this.isReplayMode = false;
+        this.productsToReplay.clear();
+        this.replayIndex = 0;
+        System.out.println("🔁 Replay mode disabled");
     }
 }

@@ -202,6 +202,7 @@ public class SimulationController {
 
     /**
      * Replay simulation from the last saved snapshot
+     * Restores state, starts simulation, and auto-stops after the same duration
      * POST /api/simulation/replay
      */
     @PostMapping("/replay")
@@ -213,12 +214,38 @@ public class SimulationController {
                         "status", "error"));
             }
 
+            SimulationSnapshot snapshot = manager.getLastSnapshot();
+            long duration = snapshot.getSimulationDuration();
+
             // Restore from snapshot
-            manager.restoreFromSnapshot(manager.getLastSnapshot());
+            manager.restoreFromSnapshot(snapshot);
+
+            // Set up deterministic replay mode
+            manager.setupReplayMode(snapshot);
+
+            // Start the simulation
+            manager.startSimulation();
+
+            // Schedule auto-stop after the same duration
+            if (duration > 0) {
+                new Thread(() -> {
+                    try {
+                        System.out.println("⏱️ Replay will auto-stop in " + (duration / 1000) + " seconds");
+                        Thread.sleep(duration);
+                        if (manager.isRunning()) {
+                            manager.stopSimulation();
+                            System.out.println("⏹️ Replay auto-stopped after " + (duration / 1000) + " seconds");
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }, "Replay-AutoStop").start();
+            }
 
             return ResponseEntity.ok(Map.of(
-                    "status", "restored",
-                    "message", "Simulation restored from snapshot. Call /start to begin replay.",
+                    "status", "replaying",
+                    "message", "Simulation replay started. Will auto-stop after " + (duration / 1000) + " seconds.",
+                    "duration", duration,
                     "queues", manager.getQueues().size(),
                     "machines", manager.getMachines().size()));
         } catch (IllegalStateException e) {
