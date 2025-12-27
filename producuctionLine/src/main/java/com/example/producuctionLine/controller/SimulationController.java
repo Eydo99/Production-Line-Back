@@ -1,6 +1,7 @@
 package com.example.producuctionLine.controller;
 
 import com.example.producuctionLine.service.SimulationManager;
+import com.example.producuctionLine.model.snapshot.SimulationSnapshot;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,18 +29,15 @@ public class SimulationController {
             return ResponseEntity.ok(Map.of(
                     "status", "started",
                     "message", "Simulation started successfully",
-                    "isRunning", true
-            ));
+                    "isRunning", true));
         } catch (IllegalStateException e) {
             return ResponseEntity.badRequest().body(Map.of(
                     "error", e.getMessage(),
-                    "status", "error"
-            ));
+                    "status", "error"));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of(
                     "error", "Internal server error: " + e.getMessage(),
-                    "status", "error"
-            ));
+                    "status", "error"));
         }
     }
 
@@ -54,13 +52,11 @@ public class SimulationController {
             return ResponseEntity.ok(Map.of(
                     "status", "stopped",
                     "message", "Simulation stopped successfully",
-                    "isRunning", false
-            ));
+                    "isRunning", false));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of(
                     "error", e.getMessage(),
-                    "status", "error"
-            ));
+                    "status", "error"));
         }
     }
 
@@ -74,13 +70,11 @@ public class SimulationController {
             manager.pauseSimulation();
             return ResponseEntity.ok(Map.of(
                     "status", "paused",
-                    "message", "Simulation paused successfully"
-            ));
+                    "message", "Simulation paused successfully"));
         } catch (IllegalStateException e) {
             return ResponseEntity.badRequest().body(Map.of(
                     "error", e.getMessage(),
-                    "status", "error"
-            ));
+                    "status", "error"));
         }
     }
 
@@ -94,13 +88,11 @@ public class SimulationController {
             manager.resumeSimulation();
             return ResponseEntity.ok(Map.of(
                     "status", "resumed",
-                    "message", "Simulation resumed successfully"
-            ));
+                    "message", "Simulation resumed successfully"));
         } catch (IllegalStateException e) {
             return ResponseEntity.badRequest().body(Map.of(
                     "error", e.getMessage(),
-                    "status", "error"
-            ));
+                    "status", "error"));
         }
     }
 
@@ -115,8 +107,7 @@ public class SimulationController {
             return ResponseEntity.ok(stats);
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of(
-                    "error", e.getMessage()
-            ));
+                    "error", e.getMessage()));
         }
     }
 
@@ -130,12 +121,10 @@ public class SimulationController {
             manager.clearSimulation();
             return ResponseEntity.ok(Map.of(
                     "status", "cleared",
-                    "message", "Simulation cleared successfully"
-            ));
+                    "message", "Simulation cleared successfully"));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of(
-                    "error", e.getMessage()
-            ));
+                    "error", e.getMessage()));
         }
     }
 
@@ -152,12 +141,94 @@ public class SimulationController {
                     "duration", manager.getSimulationDuration(),
                     "avgQueueLength", manager.getAverageQueueLength(),
                     "isRunning", manager.isRunning(),
-                    "isPaused", manager.isPaused()
-            ));
+                    "isPaused", manager.isPaused()));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of(
-                    "error", e.getMessage()
-            ));
+                    "error", e.getMessage()));
+        }
+    }
+
+    // ========== SNAPSHOT (Memento Pattern) ENDPOINTS ==========
+
+    /**
+     * Save current simulation state as a snapshot
+     * POST /api/simulation/snapshot
+     */
+    @PostMapping("/snapshot")
+    public ResponseEntity<?> saveSnapshot() {
+        try {
+            var snapshot = manager.createSnapshot();
+            return ResponseEntity.ok(Map.of(
+                    "status", "saved",
+                    "message", "Snapshot saved successfully",
+                    "timestamp", snapshot.getTimestamp(),
+                    "queues", snapshot.getQueueSnapshots().size(),
+                    "machines", snapshot.getMachineSnapshots().size(),
+                    "connections", snapshot.getConnectionSnapshots().size()));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "error", e.getMessage(),
+                    "status", "error"));
+        }
+    }
+
+    /**
+     * Check if a snapshot exists for replay
+     * GET /api/simulation/snapshot
+     */
+    @GetMapping("/snapshot")
+    public ResponseEntity<?> hasSnapshot() {
+        try {
+            boolean hasSnapshot = manager.hasSnapshot();
+            SimulationSnapshot snapshot = manager.getLastSnapshot();
+
+            if (hasSnapshot && snapshot != null) {
+                return ResponseEntity.ok(Map.of(
+                        "hasSnapshot", true,
+                        "timestamp", snapshot.getTimestamp(),
+                        "queues", snapshot.getQueueSnapshots().size(),
+                        "machines", snapshot.getMachineSnapshots().size(),
+                        "connections", snapshot.getConnectionSnapshots().size()));
+            } else {
+                return ResponseEntity.ok(Map.of(
+                        "hasSnapshot", false,
+                        "message", "No snapshot available"));
+            }
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Replay simulation from the last saved snapshot
+     * POST /api/simulation/replay
+     */
+    @PostMapping("/replay")
+    public ResponseEntity<?> replaySimulation() {
+        try {
+            if (!manager.hasSnapshot()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "error", "No snapshot available for replay",
+                        "status", "error"));
+            }
+
+            // Restore from snapshot
+            manager.restoreFromSnapshot(manager.getLastSnapshot());
+
+            return ResponseEntity.ok(Map.of(
+                    "status", "restored",
+                    "message", "Simulation restored from snapshot. Call /start to begin replay.",
+                    "queues", manager.getQueues().size(),
+                    "machines", manager.getMachines().size()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", e.getMessage(),
+                    "status", "error"));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "error", e.getMessage(),
+                    "status", "error"));
         }
     }
 }

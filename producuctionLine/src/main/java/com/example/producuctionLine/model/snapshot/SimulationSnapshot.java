@@ -1,0 +1,49 @@
+package com.example.producuctionLine.model.snapshot;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Main Simulation Snapshot (Memento Pattern)
+ * Captures the complete state of a simulation for replay functionality
+ * 
+ * This class acts as the Memento in the Memento Design Pattern:
+ * - Originator: SimulationManager (creates and restores from snapshots)
+ * - Caretaker: SimulationManager (stores the snapshot)
+ * - Memento: This class (holds the captured state)
+ */
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class SimulationSnapshot {
+
+    // Timestamp when snapshot was taken
+    private long timestamp;
+
+    // Captured states
+    private List<QueueSnapshot> queueSnapshots = new ArrayList<>();
+    private List<MachineSnapshot> machineSnapshots = new ArrayList<>();
+    private List<ConnectionSnapshot> connectionSnapshots = new ArrayList<>();
+
+    // Counters (for ID generation continuity)
+    private int queueCounter;
+    private int machineCounter;
+
+    // Statistics
+    private int totalProductsGenerated;
+    private int totalProductsProcessed;
+
+    /**
+     * Check if this snapshot is valid for replay
+     */
+    public boolean isValid() {
+        return timestamp > 0 &&
+                queueSnapshots != null &&
+                machineSnapshots != null &&
+                connectionSnapshots != null;
+    }
+}
