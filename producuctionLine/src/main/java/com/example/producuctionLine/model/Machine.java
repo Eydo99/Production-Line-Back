@@ -3,10 +3,14 @@ package com.example.producuctionLine.model;
 import java.util.Random;
 
 import com.example.producuctionLine.Obserevers.MachineObserver;
+import com.example.producuctionLine.dto.MachineUpdateDTO;
+import com.example.producuctionLine.service.WebSocketBroadcaster;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 @Data
 @NoArgsConstructor
@@ -47,17 +51,21 @@ public class Machine implements MachineObserver,Runnable {
 
     @JsonIgnore
     private Thread machineThread;
+
+    @JsonIgnore
+    private WebSocketBroadcaster broadcaster;
     
     /**
      * Constructor with position
      */
-    public Machine(String id, int machineNumber, double x, double y) {
+    public Machine(String id, int machineNumber, double x, double y,WebSocketBroadcaster broadcaster) {
         this.name = id;
         this.machineNumber = machineNumber;
         this.x = x;
         this.y = y;
         this.color = defaultColor;
         this.serviceTime = generateServiceTime();
+        this.broadcaster = broadcaster;
     }
     
     // ========== OBSERVER PATTERN ==========
@@ -90,6 +98,13 @@ public class Machine implements MachineObserver,Runnable {
 
         System.out.println("⚙️ " + name + " started processing " + product.getId());
 
+        // ✅ ADD THIS - Broadcast processing state
+        if (broadcaster != null) {
+            broadcaster.broadcastMachineUpdate(
+                    new MachineUpdateDTO(name, "processing", product.getColor())
+            );
+        }
+
         // UNCOMMENT THIS - Process in background thread
         new Thread(() -> {
             try {
@@ -104,32 +119,49 @@ public class Machine implements MachineObserver,Runnable {
     /**
      * Finish processing and move product to output queue
      */
+    // ✅ FIX THIS METHOD - Add WebSocket broadcasts
     private void finishProcessing(Product product) {
         System.out.println("✅ " + name + " finished processing " + product.getId());
-        
-        // Move product to output queue (triggers next machine!)
+
+        // ✅ ADD THIS - Broadcast flash
+        if (broadcaster != null) {
+            broadcaster.broadcastMachineUpdate(
+                    new MachineUpdateDTO(name, "FLASHING", product.getColor())
+            );
+        }
+
+        try {
+            Thread.sleep(200); // Flash duration
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        // Move product to output queue
         if (outputQueue != null) {
             outputQueue.enqueue(product);
         } else {
             System.out.println("⚠️ " + name + " has no output queue - product discarded");
         }
-        
+
         // Reset machine state
         this.currentProduct = null;
         this.currentTask = null;
         this.color = defaultColor;
         this.status = "idle";
         this.ready = true;
-        
-        // TODO: Person 4 - Add WebSocket broadcast here
-        // wsService.broadcastMachineUpdate(this);
-        
-        // Check if more products waiting in input queue
+
+        // ✅ ADD THIS - Broadcast idle state
+        if (broadcaster != null) {
+            broadcaster.broadcastMachineUpdate(
+                    new MachineUpdateDTO(name, "idle", defaultColor)
+            );
+        }
+
+        // Check if more products waiting
         if (inputQueue != null && !inputQueue.isEmpty()) {
             inputQueue.notifyObservers();
         }
     }
-    
     
     
     // ========== HELPER METHODS ==========

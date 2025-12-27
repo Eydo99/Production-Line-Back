@@ -177,7 +177,7 @@ public class SimulationManager implements SimulationOriginator {
     public Machine addMachine(double x, double y) {
         machineCounter++;
         String id = "M" + machineCounter;
-        Machine machine = new Machine(id, machineCounter, x, y);
+        Machine machine = new Machine(id, machineCounter, x, y,broadcaster);
         machines.put(id, machine);
         System.out.println("🆕 Machine created: " + id + " at (" + x + ", " + y + ")");
 
@@ -1087,7 +1087,7 @@ public class SimulationManager implements SimulationOriginator {
 
         // Restore machines (without queue references first)
         for (MachineSnapshot ms : snapshot.getMachineSnapshots()) {
-            Machine machine = new Machine(ms.getName(), ms.getMachineNumber(), ms.getX(), ms.getY());
+            Machine machine = new Machine(ms.getName(), ms.getMachineNumber(), ms.getX(), ms.getY(),broadcaster);
             machine.setStatus(ms.getStatus());
             machine.setColor(ms.getColor());
             machine.setDefaultColor(ms.getDefaultColor());
