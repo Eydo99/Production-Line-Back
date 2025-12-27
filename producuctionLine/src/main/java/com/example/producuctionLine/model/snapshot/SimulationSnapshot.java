@@ -37,6 +37,13 @@ public class SimulationSnapshot {
     private int totalProductsGenerated;
     private int totalProductsProcessed;
 
+    // Duration of the simulation run (for replay)
+    private long simulationDuration;
+
+    // Record of all products generated (for deterministic replay)
+    // Each product stores: id, color, and relative time when it was generated
+    private List<ProductSnapshot> generatedProductsRecord = new ArrayList<>();
+
     /**
      * Check if this snapshot is valid for replay
      */
