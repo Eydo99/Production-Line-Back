@@ -778,12 +778,16 @@ public class SimulationManager implements SimulationOriginator {
 
         // Set flag to stop all threads
         isRunning = false;
-        isPaused = false; // ← Already there
-        pauseStartTime = 0; // ← ADD THIS
+        isPaused = false;
+        pauseStartTime = 0;
+
+        // Disable replay mode when simulation stops
+        disableReplayMode();
 
         if (productGeneratorThread != null && productGeneratorThread.isAlive()) {
             productGeneratorThread.interrupt();
             try {
+                // Wait for generator to finish (crucial for replay consistency)
                 productGeneratorThread.join(2000);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
