@@ -23,31 +23,50 @@ public class ConnectionController {
      * POST /api/connection
      * Body: { "fromId": "Q1", "toId": "M1" }
      */
-    @PostMapping
-    public ResponseEntity<?> createConnection(@RequestBody Map<String, String> request) {
-        try {
-            String fromId = request.get("fromId");
-            String toId = request.get("toId");
-            
-            if (fromId == null || toId == null) {
-                return ResponseEntity.badRequest().body(
-                    Map.of("error", "Missing fromId or toId")
-                );
-            }
-            
-            Connection connection = manager.createConnection(fromId, toId);
-            
-            return ResponseEntity.ok(Map.of(
-                "message", "Connection created",
-                "connection", connection
-            ));
-            
-        } catch (Exception e) {
+   @PostMapping
+public ResponseEntity<?> createConnection(@RequestBody Map<String, String> request) {
+    try {
+        String fromId = request.get("fromId");
+        String toId = request.get("toId");
+        
+        if (fromId == null || toId == null) {
             return ResponseEntity.badRequest().body(
-                Map.of("error", e.getMessage())
+                Map.of("error", "Missing fromId or toId")
             );
         }
+        
+        Connection connection = manager.createConnection(fromId, toId);
+        
+        // ✅ Broadcast connection creation immediately
+        if (manager.getBroadcaster() != null) {
+            var fromNode = manager.getNodePosition(fromId);
+            var toNode = manager.getNodePosition(toId);
+            
+            manager.getBroadcaster().broadcastConnectionUpdate(
+                new com.example.producuctionLine.dto.ConnectionUpdateDTO(
+                    connection.getId(),
+                    fromId,
+                    toId,
+                    fromNode.get("x"),
+                    fromNode.get("y"),
+                    toNode.get("x"),
+                    toNode.get("y"),
+                    "created"
+                )
+            );
+        }
+        
+        return ResponseEntity.ok(Map.of(
+            "message", "Connection created",
+            "connection", connection
+        ));
+        
+    } catch (Exception e) {
+        return ResponseEntity.badRequest().body(
+            Map.of("error", e.getMessage())
+        );
     }
+}
     
     /**
      * Get all connections

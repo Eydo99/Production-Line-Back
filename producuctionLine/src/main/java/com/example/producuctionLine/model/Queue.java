@@ -3,6 +3,8 @@ package com.example.producuctionLine.model;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.example.producuctionLine.Obserevers.MachineObserver;
 import com.example.producuctionLine.Obserevers.Observable;
+import com.example.producuctionLine.service.WebSocketBroadcaster;
+
 import lombok.Data;
 
 import java.util.List;
@@ -67,25 +69,47 @@ public class Queue implements Observable {
     /**
      * Add product to queue and notify observers
      */
-    public synchronized void enqueue(Product product) {
-        products.offer(product);
-        System.out.println("📦 Product " + product.getId() + 
-                          " added to " + id + " (size: " + size() + ")");
-        notifyObservers(); // Notify machines waiting for products
+ // Add WebSocketBroadcaster field at the top of the class (after line 18, before the "id" field)
+@JsonIgnore
+private WebSocketBroadcaster broadcaster;
+
+// Add setter method (after the constructor, around line 35)
+public void setBroadcaster(WebSocketBroadcaster broadcaster) {
+    this.broadcaster = broadcaster;
+}
+
+// Replace enqueue method
+public synchronized void enqueue(Product product) {
+    products.offer(product);
+    System.out.println("📦 Product " + product.getId() + 
+                      " added to " + id + " (size: " + size() + ")");
+    
+    // ✅ Broadcast queue update
+    if (broadcaster != null) {
+        broadcaster.broadcastQueueUpdate(
+            new com.example.producuctionLine.dto.QueueUpdateDTO(id, size())
+        );
     }
     
-    /**
-     * Remove and return product from queue
-     */
-    public synchronized Product dequeue() {
-        Product product = products.poll();
-        if (product != null) {
-            System.out.println("📤 Product " + product.getId() + 
-                              " removed from " + id + " (size: " + size() + ")");
+    notifyObservers();
+}
+
+// Replace dequeue method
+public synchronized Product dequeue() {
+    Product product = products.poll();
+    if (product != null) {
+        System.out.println("📤 Product " + product.getId() + 
+                          " removed from " + id + " (size: " + size() + ")");
+        
+        // ✅ Broadcast queue update
+        if (broadcaster != null) {
+            broadcaster.broadcastQueueUpdate(
+                new com.example.producuctionLine.dto.QueueUpdateDTO(id, size())
+            );
         }
-        return product;
     }
-    
+    return product;
+}
     /**
      * Get current queue size
      */

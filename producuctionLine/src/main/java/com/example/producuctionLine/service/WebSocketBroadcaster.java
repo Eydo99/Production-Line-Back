@@ -24,4 +24,14 @@ public class WebSocketBroadcaster {
     public void broadcastStatistics() {
         // TODO: Implement statistics broadcasting if needed
     }
+
+    public void broadcastConnectionUpdate(com.example.producuctionLine.dto.ConnectionUpdateDTO update) {
+    messagingTemplate.convertAndSend("/topic/connections", update);
+}
+
+public void broadcastProductMovement(com.example.producuctionLine.dto.ProductMovementDTO movement) {
+    messagingTemplate.convertAndSend("/topic/product-movement", movement);
+}
+
+
 }

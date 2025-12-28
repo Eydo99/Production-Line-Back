@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.*;
 
+
 /**
  * Singleton class to manage entire simulation
  * Coordinates all queues, machines, and connections
@@ -140,14 +141,15 @@ public class SimulationManager implements SimulationOriginator {
      * @param y Y coordinate
      * @return Created queue
      */
-    public Queue addQueue(double x, double y) {
-        queueCounter++;
-        String id = "Q" + queueCounter;
-        Queue queue = new Queue(id, x, y);
-        queues.put(id, queue);
-        System.out.println("🆕 Queue created: " + id + " at (" + x + ", " + y + ")");
-        return queue;
-    }
+public Queue addQueue(double x, double y) {
+    queueCounter++;
+    String id = "Q" + queueCounter;
+    Queue queue = new Queue(id, x, y);
+    queue.setBroadcaster(broadcaster); // ✅ Inject broadcaster
+    queues.put(id, queue);
+    System.out.println("🆕 Queue created: " + id + " at (" + x + ", " + y + ")");
+    return queue;
+}
 
     public Queue getQueue(String id) {
         return queues.get(id);
@@ -401,38 +403,45 @@ public class SimulationManager implements SimulationOriginator {
                     break;
 
                 // If machine is ready and has input queue, check for products
-                if (machine.isReady() && machine.getInputQueue() != null) {
-                    Queue inputQueue = machine.getInputQueue();
-                    if (!inputQueue.isEmpty()) {
-
-                        // 🚫 DO NOT take product if paused or stopped - with synchronized check
-                        synchronized (this) {
-                            if (isPaused || !isRunning) {
-                                Thread.sleep(50);
-                                continue;
-                            }
-                        }
-
-                        // Double-check to prevent race condition
-                        if (isPaused || !isRunning) {
-                            Thread.sleep(50);
-                            continue;
-                        }
-
-                        Product product = inputQueue.dequeue();
-
-                        if (product != null) {
-                            processProductOnMachine(machine, product);
-
-                            // ⛔ stop immediately if simulation ended mid-processing
-                            if (!isRunning || Thread.currentThread().isInterrupted()) {
-                                break;
-                            }
-                        }
-                    } else {
-                        inputQueue.registerObserver(machine);
-                    }
+               // If machine is ready and has input queue, check for products
+if (machine.isReady() && machine.getInputQueue() != null) {
+    Queue inputQueue = machine.getInputQueue();
+    
+    // ✅ NEW: Only process if this machine is randomly selected
+    if (!inputQueue.isEmpty()) {
+        Machine selectedMachine = selectRandomAvailableMachine(inputQueue);
+        
+        // Only proceed if THIS machine was randomly selected
+        if (selectedMachine == machine) {
+            synchronized (this) {
+                if (isPaused || !isRunning) {
+                    Thread.sleep(50);
+                    continue;
                 }
+            }
+
+            if (isPaused || !isRunning) {
+                Thread.sleep(50);
+                continue;
+            }
+
+            Product product = inputQueue.dequeue();
+
+            if (product != null) {
+                processProductOnMachine(machine, product);
+
+                if (!isRunning || Thread.currentThread().isInterrupted()) {
+                    break;
+                }
+            }
+        } else {
+            // This machine wasn't selected, wait a bit
+            Thread.sleep(100);
+        }
+    } else {
+        inputQueue.registerObserver(machine);
+    }
+}
 
                 Thread.sleep(50);
 
@@ -448,6 +457,33 @@ public class SimulationManager implements SimulationOriginator {
 
         System.out.println("🛑 " + machine.getName() + " thread stopped");
     }
+
+
+    /**
+ * Randomly select an available machine from a queue's observers
+ * Implements many-to-many relationship with random distribution
+ */
+private Machine selectRandomAvailableMachine(Queue queue) {
+    List<Machine> availableMachines = new ArrayList<>();
+    
+    // Collect all ready machines observing this queue
+    for (var observer : queue.getObservers()) {
+        if (observer instanceof Machine) {
+            Machine m = (Machine) observer;
+            if (m.isReady()) {
+                availableMachines.add(m);
+            }
+        }
+    }
+    
+    if (availableMachines.isEmpty()) {
+        return null;
+    }
+    
+    // Random selection
+    int randomIndex = new Random().nextInt(availableMachines.size());
+    return availableMachines.get(randomIndex);
+}
 
     /**
      * Process product on machine - now checks for pause/stop during sleep
@@ -489,6 +525,21 @@ public class SimulationManager implements SimulationOriginator {
                         machine.getName(),
                         "processing",
                         product.getColor()));
+
+                        if (machine.getOutputQueue() != null) {
+    String connectionId = machine.getName() + "-" + machine.getOutputQueue().getId();
+    broadcaster.broadcastProductMovement(
+        new com.example.producuctionLine.dto.ProductMovementDTO(
+            product.getId(),
+            connectionId,
+            machine.getName(),
+            machine.getOutputQueue().getId(),
+            product.getColor(),
+            0.0, // Starting position
+            System.currentTimeMillis()
+        )
+    );
+}
             }
 
             // Sleep in small chunks so we can respond to pause/stop quickly
@@ -564,12 +615,27 @@ public class SimulationManager implements SimulationOriginator {
             }
 
             // Only proceed if not paused and running
-            if (machine.getOutputQueue() != null) {
-                machine.getOutputQueue().enqueue(product);
-                totalProductsProcessed++;
-                System.out.println("📤 " + machine.getName() + " sent product to " +
-                        machine.getOutputQueue().getId());
-            } else {
+          if (machine.getOutputQueue() != null) {
+    machine.getOutputQueue().enqueue(product);
+    totalProductsProcessed++;
+    
+    // ✅ ADD THIS - Broadcast product movement completion
+    String connectionId = machine.getName() + "-" + machine.getOutputQueue().getId();
+    broadcaster.broadcastProductMovement(
+        new com.example.producuctionLine.dto.ProductMovementDTO(
+            product.getId(),
+            connectionId,
+            machine.getName(),
+            machine.getOutputQueue().getId(),
+            product.getColor(),
+            1.0, // Completed
+            System.currentTimeMillis()
+        )
+    );
+    
+    System.out.println("📤 " + machine.getName() + " sent product to " +
+            machine.getOutputQueue().getId());
+}else {
                 System.out.println("⚠️  " + machine.getName() + " has no output queue - product completed");
                 totalProductsProcessed++;
             }
@@ -1071,6 +1137,7 @@ public class SimulationManager implements SimulationOriginator {
         // Restore queues with their products
         for (QueueSnapshot qs : snapshot.getQueueSnapshots()) {
             Queue queue = new Queue(qs.getId(), qs.getX(), qs.getY());
+            queue.setBroadcaster(broadcaster);
 
             // Restore products in queue
             for (ProductSnapshot ps : qs.getProductSnapshots()) {
@@ -1194,4 +1261,22 @@ public class SimulationManager implements SimulationOriginator {
         this.replayIndex = 0;
         System.out.println("🔁 Replay mode disabled");
     }
+
+
+
+    public WebSocketBroadcaster getBroadcaster() {
+    return broadcaster;
+}
+
+// ✅ Add this new method
+public Map<String, Double> getNodePosition(String nodeId) {
+    if (queues.containsKey(nodeId)) {
+        Queue q = queues.get(nodeId);
+        return Map.of("x", q.getX(), "y", q.getY());
+    } else if (machines.containsKey(nodeId)) {
+        Machine m = machines.get(nodeId);
+        return Map.of("x", m.getX(), "y", m.getY());
+    }
+    return Map.of("x", 0.0, "y", 0.0);
+}
 }
