@@ -16,7 +16,11 @@ import java.util.Map;
 @CrossOrigin(origins = "http://localhost:4200")
 public class SimulationController {
 
-    private final SimulationManager manager = SimulationManager.getInstance();
+    private final SimulationManager manager;
+
+    public SimulationController(SimulationManager manager) {
+        this.manager = manager;
+    }
 
     /**
      * Start the simulation

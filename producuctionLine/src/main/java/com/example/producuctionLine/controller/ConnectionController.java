@@ -15,9 +15,13 @@ import java.util.Map;
 @RequestMapping("/api/connection")
 @CrossOrigin(origins = "http://localhost:4200")
 public class ConnectionController {
-    
-    private final SimulationManager manager = SimulationManager.getInstance();
-    
+
+    private final SimulationManager manager;
+
+    public ConnectionController(SimulationManager manager) {
+        this.manager = manager;
+    }
+
     /**
      * Create connection between nodes
      * POST /api/connection
@@ -28,27 +32,24 @@ public class ConnectionController {
         try {
             String fromId = request.get("fromId");
             String toId = request.get("toId");
-            
+
             if (fromId == null || toId == null) {
                 return ResponseEntity.badRequest().body(
-                    Map.of("error", "Missing fromId or toId")
-                );
+                        Map.of("error", "Missing fromId or toId"));
             }
-            
+
             Connection connection = manager.createConnection(fromId, toId);
-            
+
             return ResponseEntity.ok(Map.of(
-                "message", "Connection created",
-                "connection", connection
-            ));
-            
+                    "message", "Connection created",
+                    "connection", connection));
+
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(
-                Map.of("error", e.getMessage())
-            );
+                    Map.of("error", e.getMessage()));
         }
     }
-    
+
     /**
      * Get all connections
      * GET /api/connection

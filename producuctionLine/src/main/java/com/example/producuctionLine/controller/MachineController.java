@@ -15,9 +15,13 @@ import java.util.Map;
 @RequestMapping("/api/machine")
 @CrossOrigin(origins = "http://localhost:4200")
 public class MachineController {
-    
-    private final SimulationManager manager = SimulationManager.getInstance();
-    
+
+    private final SimulationManager manager;
+
+    public MachineController(SimulationManager manager) {
+        this.manager = manager;
+    }
+
     /**
      * Create new machine
      * POST /api/machine
@@ -27,11 +31,11 @@ public class MachineController {
     public ResponseEntity<Machine> createMachine(@RequestBody Map<String, Double> request) {
         double x = request.getOrDefault("x", 100.0);
         double y = request.getOrDefault("y", 100.0);
-        
+
         Machine machine = manager.addMachine(x, y);
         return ResponseEntity.ok(machine);
     }
-    
+
     /**
      * Get all machines
      * GET /api/machine
@@ -40,7 +44,7 @@ public class MachineController {
     public ResponseEntity<Collection<Machine>> getAllMachines() {
         return ResponseEntity.ok(manager.getMachines().values());
     }
-    
+
     /**
      * Get machine by ID
      * GET /api/machine/{id}
@@ -53,7 +57,7 @@ public class MachineController {
         }
         return ResponseEntity.ok(machine);
     }
-    
+
     /**
      * Update machine position
      * PUT /api/machine/{id}/position
@@ -63,21 +67,21 @@ public class MachineController {
     public ResponseEntity<Machine> updatePosition(
             @PathVariable String id,
             @RequestBody Map<String, Double> position) {
-        
+
         Machine machine = manager.getMachine(id);
         if (machine == null) {
             return ResponseEntity.notFound().build();
         }
-        
+
         machine.setX(position.getOrDefault("x", machine.getX()));
         machine.setY(position.getOrDefault("y", machine.getY()));
-        
-        System.out.println("⚙️ Machine " + id + " moved to (" + 
-                          machine.getX() + ", " + machine.getY() + ")");
-        
+
+        System.out.println("⚙️ Machine " + id + " moved to (" +
+                machine.getX() + ", " + machine.getY() + ")");
+
         return ResponseEntity.ok(machine);
     }
-    
+
     /**
      * Update machine service time
      * PUT /api/machine/{id}/servicetime
@@ -87,20 +91,20 @@ public class MachineController {
     public ResponseEntity<Machine> updateServiceTime(
             @PathVariable String id,
             @RequestBody Map<String, Integer> request) {
-        
+
         Machine machine = manager.getMachine(id);
         if (machine == null) {
             return ResponseEntity.notFound().build();
         }
-        
+
         int serviceTime = request.getOrDefault("serviceTime", machine.getServiceTime());
         machine.setServiceTime(serviceTime);
-        
+
         System.out.println("⏱️ Machine " + id + " service time updated to " + serviceTime + "ms");
-        
+
         return ResponseEntity.ok(machine);
     }
-    
+
     /**
      * Get machine status
      * GET /api/machine/{id}/status
@@ -111,17 +115,16 @@ public class MachineController {
         if (machine == null) {
             return ResponseEntity.notFound().build();
         }
-        
+
         return ResponseEntity.ok(Map.of(
-            "id", machine.getName(),
-            "status", machine.getStatus(),
-            "isReady", machine.isReady(),
-            "color", machine.getColor(),
-            "serviceTime", machine.getServiceTime(),
-            "hasCurrentProduct", machine.getCurrentProduct() != null
-        ));
+                "id", machine.getName(),
+                "status", machine.getStatus(),
+                "isReady", machine.isReady(),
+                "color", machine.getColor(),
+                "serviceTime", machine.getServiceTime(),
+                "hasCurrentProduct", machine.getCurrentProduct() != null));
     }
-    
+
     /**
      * Delete machine
      * DELETE /api/machine/{id}
@@ -132,11 +135,10 @@ public class MachineController {
         if (machine == null) {
             return ResponseEntity.notFound().build();
         }
-        
+
         manager.removeMachine(id);
         return ResponseEntity.ok(Map.of(
-            "message", "Machine deleted",
-            "id", id
-        ));
+                "message", "Machine deleted",
+                "id", id));
     }
 }

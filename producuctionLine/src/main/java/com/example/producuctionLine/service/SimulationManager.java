@@ -33,17 +33,10 @@ import java.util.concurrent.*;
 @Service
 public class SimulationManager implements SimulationOriginator {
 
-    // ========== SINGLETON INSTANCE ==========
-    private static SimulationManager instance;
-
     // ========== WEBSOCKET BROADCASTER (PERSON 4) ==========
-    @Autowired
-    private WebSocketBroadcaster broadcaster;
+    private final WebSocketBroadcaster broadcaster;
 
     // ========== CARETAKER (Memento Pattern) ==========
-    // Note: Not using @Autowired because SimulationManager uses manual singleton
-    // pattern
-    // which bypasses Spring's dependency injection
     private final SimulationCaretaker caretaker = new SimulationCaretaker();
 
     /**
@@ -117,17 +110,12 @@ public class SimulationManager implements SimulationOriginator {
     private final List<ProductSnapshot> recordedProducts = new ArrayList<>();
 
     /**
-     * Private constructor for Singleton pattern
+     * Constructor Injection for Broadcaster
      */
-    private SimulationManager() {
-        System.out.println("🏗️ SimulationManager initialized");
-    }
-
-    public static synchronized SimulationManager getInstance() {
-        if (instance == null) {
-            instance = new SimulationManager();
-        }
-        return instance;
+    @Autowired
+    public SimulationManager(WebSocketBroadcaster broadcaster) {
+        this.broadcaster = broadcaster;
+        System.out.println("🏗️ SimulationManager initialized with Broadcaster");
     }
 
     // ========================================================================
@@ -429,6 +417,14 @@ public class SimulationManager implements SimulationOriginator {
                             if (!isRunning || Thread.currentThread().isInterrupted()) {
                                 break;
                             }
+
+                            // BROADCAST QUEUE UPDATE (Dequeued)
+                            if (broadcaster != null) {
+                                broadcaster.broadcastQueueUpdate(new com.example.producuctionLine.dto.QueueUpdateDTO(
+                                        inputQueue.getId(),
+                                        inputQueue.getProducts().size()
+                                ));
+                            }
                         }
                     } else {
                         inputQueue.registerObserver(machine);
@@ -570,6 +566,14 @@ public class SimulationManager implements SimulationOriginator {
                 totalProductsProcessed++;
                 System.out.println("📤 " + machine.getName() + " sent product to " +
                         machine.getOutputQueue().getId());
+
+                // BROADCAST QUEUE UPDATE (Enqueued at output)
+                if (broadcaster != null) {
+                    broadcaster.broadcastQueueUpdate(new com.example.producuctionLine.dto.QueueUpdateDTO(
+                            machine.getOutputQueue().getId(),
+                            machine.getOutputQueue().getProducts().size()
+                    ));
+                }
             } else {
                 System.out.println("⚠️  " + machine.getName() + " has no output queue - product completed");
                 totalProductsProcessed++;
@@ -697,6 +701,14 @@ public class SimulationManager implements SimulationOriginator {
                     System.out.println("🆕 Generated product #" + totalProductsGenerated +
                             ": " + product.getId() +
                             " (color: " + product.getColor() + ") → " + firstQueue.getId());
+
+                    // BROADCAST QUEUE UPDATE (Generated Product Enqueued)
+                    if (broadcaster != null) {
+                        broadcaster.broadcastQueueUpdate(new com.example.producuctionLine.dto.QueueUpdateDTO(
+                                firstQueue.getId(),
+                                firstQueue.getProducts().size()
+                        ));
+                    }
 
                     broadcastStatistics();
                 }

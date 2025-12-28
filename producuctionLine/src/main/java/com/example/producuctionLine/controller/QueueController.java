@@ -15,9 +15,13 @@ import java.util.Map;
 @RequestMapping("/api/queue")
 @CrossOrigin(origins = "http://localhost:4200")
 public class QueueController {
-    
-    private final SimulationManager manager = SimulationManager.getInstance();
-    
+
+    private final SimulationManager manager;
+
+    public QueueController(SimulationManager manager) {
+        this.manager = manager;
+    }
+
     /**
      * Create new queue
      * POST /api/queue
@@ -27,11 +31,11 @@ public class QueueController {
     public ResponseEntity<Queue> createQueue(@RequestBody Map<String, Double> request) {
         double x = request.getOrDefault("x", 100.0);
         double y = request.getOrDefault("y", 100.0);
-        
+
         Queue queue = manager.addQueue(x, y);
         return ResponseEntity.ok(queue);
     }
-    
+
     /**
      * Get all queues
      * GET /api/queue
@@ -40,7 +44,7 @@ public class QueueController {
     public ResponseEntity<Collection<Queue>> getAllQueues() {
         return ResponseEntity.ok(manager.getQueues().values());
     }
-    
+
     /**
      * Get queue by ID
      * GET /api/queue/{id}
@@ -53,7 +57,7 @@ public class QueueController {
         }
         return ResponseEntity.ok(queue);
     }
-    
+
     /**
      * Update queue position
      * PUT /api/queue/{id}/position
@@ -63,21 +67,21 @@ public class QueueController {
     public ResponseEntity<Queue> updatePosition(
             @PathVariable String id,
             @RequestBody Map<String, Double> position) {
-        
+
         Queue queue = manager.getQueue(id);
         if (queue == null) {
             return ResponseEntity.notFound().build();
         }
-        
+
         queue.setX(position.getOrDefault("x", queue.getX()));
         queue.setY(position.getOrDefault("y", queue.getY()));
-        
-        System.out.println("📍 Queue " + id + " moved to (" + 
-                          queue.getX() + ", " + queue.getY() + ")");
-        
+
+        System.out.println("📍 Queue " + id + " moved to (" +
+                queue.getX() + ", " + queue.getY() + ")");
+
         return ResponseEntity.ok(queue);
     }
-    
+
     /**
      * Delete queue
      * DELETE /api/queue/{id}
@@ -86,8 +90,7 @@ public class QueueController {
     public ResponseEntity<Map<String, String>> deleteQueue(@PathVariable String id) {
         manager.removeQueue(id);
         return ResponseEntity.ok(Map.of(
-            "message", "Queue deleted",
-            "id", id
-        ));
+                "message", "Queue deleted",
+                "id", id));
     }
 }
