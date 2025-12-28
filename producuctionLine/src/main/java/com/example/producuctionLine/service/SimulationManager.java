@@ -1,6 +1,7 @@
 package com.example.producuctionLine.service;
 
 import com.example.producuctionLine.dto.MachineUpdateDTO;
+import com.example.producuctionLine.dto.QueueUpdateDTO;
 import com.example.producuctionLine.model.Connection;
 import com.example.producuctionLine.model.Machine;
 import com.example.producuctionLine.model.Product;
@@ -449,21 +450,22 @@ public class SimulationManager implements SimulationOriginator {
     /**
      * Process product on machine - now checks for pause/stop during sleep
      */
+// In SimulationManager.java - Updated processProductOnMachine method
+
+    // Add this enhanced logging to processProductOnMachine in SimulationManager.java
+
     private void processProductOnMachine(Machine machine, Product product) {
 
-        // ⏸️ IMMEDIATE PAUSE CHECK - If paused, return product and exit
+        // ⏸️ IMMEDIATE PAUSE CHECK
         if (isPaused) {
-            // Return product to input queue
             if (machine.getInputQueue() != null && product != null) {
                 machine.getInputQueue().enqueue(product);
                 System.out.println("⏸️  " + machine.getName() + " returned product to queue (paused)");
             }
-            // Reset machine state
             resetMachine(machine);
             return;
         }
 
-        // Check if simulation stopped
         if (!isRunning) {
             if (machine.getInputQueue() != null && product != null) {
                 machine.getInputQueue().enqueue(product);
@@ -471,6 +473,7 @@ public class SimulationManager implements SimulationOriginator {
             resetMachine(machine);
             return;
         }
+
         try {
             machine.setReady(false);
             machine.setStatus("processing");
@@ -481,95 +484,117 @@ public class SimulationManager implements SimulationOriginator {
             System.out.println("⚙️  " + machine.getName() + " started processing " +
                     product.getId() + " (color: " + product.getColor() + ")");
 
+            // 🆕 BROADCAST - Processing Started
             if (broadcaster != null) {
-                broadcaster.broadcastMachineUpdate(new MachineUpdateDTO(
+                MachineUpdateDTO dto = new MachineUpdateDTO(
                         machine.getName(),
                         "processing",
-                        product.getColor()));
+                        product.getColor());
+                System.out.println("📤 Broadcasting: " + dto);
+                broadcaster.broadcastMachineUpdate(dto);
+            } else {
+                System.err.println("❌ BROADCASTER IS NULL!");
             }
 
-            // Sleep in small chunks so we can respond to pause/stop quickly
+            // Sleep in small chunks
             int serviceTime = machine.getServiceTime();
             int elapsed = 0;
-            int sleepChunk = 100; // Check every 100ms
+            int sleepChunk = 100;
 
             while (elapsed < serviceTime) {
-                // Check if stopped or paused BEFORE sleeping
                 if (!isRunning) {
-                    System.out.println("⏹️  " + machine.getName() + " processing aborted (simulation stopped)");
+                    System.out.println("ℹ️  " + machine.getName() + " processing aborted (simulation stopped)");
                     resetMachine(machine);
+
+                    if (broadcaster != null) {
+                        broadcaster.broadcastMachineUpdate(new MachineUpdateDTO(
+                                machine.getName(),
+                                "idle",
+                                machine.getDefaultColor()));
+                    }
                     return;
                 }
 
-                // Wait while paused - MORE RESPONSIVE VERSION
                 while (isPaused) {
-                    // Check every 10ms instead of 50ms for faster response
                     Thread.sleep(10);
-
-                    // If simulation stopped while paused
                     if (!isRunning) {
-                        // 🔁 return product to input queue
                         if (machine.getInputQueue() != null && product != null) {
                             machine.getInputQueue().enqueue(product);
-                            System.out.println("⏹️  " + machine.getName() + " returned product (stopped while paused)");
                         }
                         resetMachine(machine);
+
+                        if (broadcaster != null) {
+                            broadcaster.broadcastMachineUpdate(new MachineUpdateDTO(
+                                    machine.getName(),
+                                    "idle",
+                                    machine.getDefaultColor()));
+                        }
                         return;
                     }
                 }
 
-                // Sleep for a chunk
                 int remainingTime = serviceTime - elapsed;
                 int timeToSleep = Math.min(sleepChunk, remainingTime);
                 Thread.sleep(timeToSleep);
                 elapsed += timeToSleep;
             }
-            // Only continue if simulation is still running
+
             if (!isRunning) {
-                // 🔁 return product to input queue
                 if (machine.getInputQueue() != null && product != null) {
                     machine.getInputQueue().enqueue(product);
                 }
                 resetMachine(machine);
+
+                if (broadcaster != null) {
+                    broadcaster.broadcastMachineUpdate(new MachineUpdateDTO(
+                            machine.getName(),
+                            "idle",
+                            machine.getDefaultColor()));
+                }
                 return;
             }
+
             // Flash effect
             System.out.println("✨ " + machine.getName() + " finished processing " + product.getId());
 
+            // 🆕 BROADCAST - Flashing
             if (broadcaster != null) {
-                broadcaster.broadcastMachineUpdate(new MachineUpdateDTO(
+                MachineUpdateDTO dto = new MachineUpdateDTO(
                         machine.getName(),
                         "FLASHING",
-                        product.getColor()));
+                        product.getColor());
+                System.out.println("📤 Broadcasting FLASH: " + dto);
+                broadcaster.broadcastMachineUpdate(dto);
             }
 
             Thread.sleep(200); // Flash duration
 
-            // Move product to output queue - WITH PROPER PAUSE CHECKING
-
-            // Check pause/stop state with synchronization
             synchronized (this) {
                 if (!isRunning || isPaused) {
-                    // Return product to input queue if paused/stopped
                     if (machine.getInputQueue() != null) {
                         machine.getInputQueue().enqueue(product);
-                        System.out.println("⏸️  " + machine.getName() + " returned product (paused/stopped at output)");
                     }
                     resetMachine(machine);
+
+                    if (broadcaster != null) {
+                        broadcaster.broadcastMachineUpdate(new MachineUpdateDTO(
+                                machine.getName(),
+                                "idle",
+                                machine.getDefaultColor()));
+                    }
                     return;
                 }
             }
 
-            // Only proceed if not paused and running
+            // Move to output queue
             if (machine.getOutputQueue() != null) {
                 machine.getOutputQueue().enqueue(product);
                 totalProductsProcessed++;
                 System.out.println("📤 " + machine.getName() + " sent product to " +
                         machine.getOutputQueue().getId());
 
-                // BROADCAST QUEUE UPDATE (Enqueued at output)
                 if (broadcaster != null) {
-                    broadcaster.broadcastQueueUpdate(new com.example.producuctionLine.dto.QueueUpdateDTO(
+                    broadcaster.broadcastQueueUpdate(new QueueUpdateDTO(
                             machine.getOutputQueue().getId(),
                             machine.getOutputQueue().getProducts().size()
                     ));
@@ -579,7 +604,25 @@ public class SimulationManager implements SimulationOriginator {
                 totalProductsProcessed++;
             }
 
-            // Reset machine state
+            // Reset machine
+            resetMachine(machine);
+
+            // 🆕 BROADCAST - Back to Idle
+            if (broadcaster != null) {
+                MachineUpdateDTO dto = new MachineUpdateDTO(
+                        machine.getName(),
+                        "idle",
+                        machine.getDefaultColor());
+                System.out.println("📤 Broadcasting IDLE: " + dto);
+                broadcaster.broadcastMachineUpdate(dto);
+            }
+
+            broadcastStatistics();
+
+        } catch (InterruptedException e) {
+            if (machine.getInputQueue() != null && product != null) {
+                machine.getInputQueue().enqueue(product);
+            }
             resetMachine(machine);
 
             if (broadcaster != null) {
@@ -589,21 +632,9 @@ public class SimulationManager implements SimulationOriginator {
                         machine.getDefaultColor()));
             }
 
-            broadcastStatistics();
-
-        } catch (InterruptedException e) {
-
-            // 🔁 return product safely
-            if (machine.getInputQueue() != null && product != null) {
-                machine.getInputQueue().enqueue(product);
-            }
-
-            resetMachine(machine);
             Thread.currentThread().interrupt();
         }
-
     }
-
     /**
      * Helper method to reset machine to idle state
      */

@@ -10,35 +10,35 @@ import lombok.NoArgsConstructor;
 
 @Data
 @NoArgsConstructor
-public class Machine implements MachineObserver,Runnable {
-    
+public class Machine implements MachineObserver, Runnable {
+
     // ========== IDENTIFICATION ==========
     private String name;              // M1, M2, etc. (for frontend)
     private int machineNumber;      // 1, 2, 3 (numeric ID)
-    
+
     // ========== POSITION ==========
     private double x;
     private double y;
-    
+
     // ========== STATUS ==========
     private String status = "idle"; // "idle", "processing", "error"
     private String currentTask;     // Display current product ID
     private boolean ready = true;   // Is machine ready for next product
-    
+
     // ========== APPEARANCE ==========
     private String color;
     private String defaultColor = "#3b82f6"; // Blue
-    
+
     // ========== PROCESSING ==========
     private int serviceTime;        // Random processing time (ms)
-    
+
     @JsonIgnore
     private Product currentProduct;
-    
+
     // ========== CONNECTIONS ==========
     @JsonIgnore
     private Queue inputQueue;       // Where products come from
-    
+
     @JsonIgnore
     private Queue outputQueue;      // Where products go to
 
@@ -47,7 +47,7 @@ public class Machine implements MachineObserver,Runnable {
 
     @JsonIgnore
     private Thread machineThread;
-    
+
     /**
      * Constructor with position
      */
@@ -59,95 +59,37 @@ public class Machine implements MachineObserver,Runnable {
         this.color = defaultColor;
         this.serviceTime = generateServiceTime();
     }
-    
+
     // ========== OBSERVER PATTERN ==========
-    
+
     /**
      * Called when input queue has products available
+     * NOTE: This does NOT process the product - it just wakes up the machine
+     * The actual processing is done by SimulationManager's machine threads
      */
     @Override
     public void onProductAvailable(Queue queue) {
-        // Only react if: ready, it's my input queue, and queue has products
-        if (ready && queue == inputQueue && !queue.isEmpty()) {
-            Product product = queue.dequeue();
-            if (product != null) {
-                processProduct(product);
-            }
-        }
+        // Just notify that products are available
+        // The SimulationManager's machine thread will handle the actual processing
+        System.out.println("📢 " + name + " notified: products available in " + queue.getId());
     }
-    
-    // ========== PROCESSING LOGIC ==========
-    
-    /**
-     * Process a product asynchronously
-     */
-    private void processProduct(Product product) {
-        this.ready = false;
-        this.status = "processing";
-        this.currentProduct = product;
-        this.currentTask = product.getId();
-        this.color = product.getColor();
 
-        System.out.println("⚙️ " + name + " started processing " + product.getId());
-
-        // UNCOMMENT THIS - Process in background thread
-        new Thread(() -> {
-            try {
-                Thread.sleep(serviceTime);
-                finishProcessing(product);
-            } catch (InterruptedException e) {
-                handleError(e);
-            }
-        }).start();
-    }
-    
-    /**
-     * Finish processing and move product to output queue
-     */
-    private void finishProcessing(Product product) {
-        System.out.println("✅ " + name + " finished processing " + product.getId());
-        
-        // Move product to output queue (triggers next machine!)
-        if (outputQueue != null) {
-            outputQueue.enqueue(product);
-        } else {
-            System.out.println("⚠️ " + name + " has no output queue - product discarded");
-        }
-        
-        // Reset machine state
-        this.currentProduct = null;
-        this.currentTask = null;
-        this.color = defaultColor;
-        this.status = "idle";
-        this.ready = true;
-        
-        // TODO: Person 4 - Add WebSocket broadcast here
-        // wsService.broadcastMachineUpdate(this);
-        
-        // Check if more products waiting in input queue
-        if (inputQueue != null && !inputQueue.isEmpty()) {
-            inputQueue.notifyObservers();
-        }
-    }
-    
-    
-    
     // ========== HELPER METHODS ==========
-    
+
     /**
      * Generate random service time between 1-5 seconds
      */
     private int generateServiceTime() {
         return new Random().nextInt(4000) + 1000;
     }
-    
+
     /**
      * Get status for JSON serialization
      */
     public String getStatus() {
         return status;
     }
-    
+
     /**
      * Check if machine is ready
      */
@@ -155,11 +97,10 @@ public class Machine implements MachineObserver,Runnable {
         return ready;
     }
 
-
     @Override
     public void run() {
         isRunning = true;
-        System.out.println("🏁 " + name + " thread started");
+        System.out.println("🏭 " + name + " thread started");
 
         while (isRunning) {
             try {
@@ -172,14 +113,13 @@ public class Machine implements MachineObserver,Runnable {
 
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                System.out.println("⏹️ " + name + " thread interrupted");
+                System.out.println("ℹ️ " + name + " thread interrupted");
                 break;
             }
         }
 
         System.out.println("🛑 " + name + " thread stopped");
     }
-
 
     private void handleError(Exception e) {
         System.err.println("❌ " + name + " error: " + e.getMessage());
@@ -188,5 +128,4 @@ public class Machine implements MachineObserver,Runnable {
         this.currentProduct = null;
         this.color = defaultColor;
     }
-
 }
