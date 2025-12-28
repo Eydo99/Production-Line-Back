@@ -23,8 +23,8 @@ public class MachineSnapshot {
     private boolean ready;
 
     // Queue references (by ID for reconstruction)
-    private String inputQueueId;
-    private String outputQueueId;
+    private java.util.List<String> inputQueueIds;
+    private java.util.List<String> outputQueueIds;
 
     // Current product if processing
     private ProductSnapshot currentProductSnapshot;

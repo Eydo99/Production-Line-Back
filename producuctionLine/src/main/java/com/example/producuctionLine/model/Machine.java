@@ -1,6 +1,8 @@
 package com.example.producuctionLine.model;
 
+import java.util.List;
 import java.util.Random;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.example.producuctionLine.Obserevers.MachineObserver;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -13,8 +15,8 @@ import lombok.NoArgsConstructor;
 public class Machine implements MachineObserver, Runnable {
 
     // ========== IDENTIFICATION ==========
-    private String name;              // M1, M2, etc. (for frontend)
-    private int machineNumber;      // 1, 2, 3 (numeric ID)
+    private String name; // M1, M2, etc. (for frontend)
+    private int machineNumber; // 1, 2, 3 (numeric ID)
 
     // ========== POSITION ==========
     private double x;
@@ -22,25 +24,53 @@ public class Machine implements MachineObserver, Runnable {
 
     // ========== STATUS ==========
     private String status = "idle"; // "idle", "processing", "error"
-    private String currentTask;     // Display current product ID
-    private boolean ready = true;   // Is machine ready for next product
+    private String currentTask; // Display current product ID
+    private boolean ready = true; // Is machine ready for next product
 
     // ========== APPEARANCE ==========
     private String color;
     private String defaultColor = "#3b82f6"; // Blue
 
     // ========== PROCESSING ==========
-    private int serviceTime;        // Random processing time (ms)
+    private int serviceTime; // Random processing time (ms)
 
     @JsonIgnore
     private Product currentProduct;
 
     // ========== CONNECTIONS ==========
     @JsonIgnore
-    private Queue inputQueue;       // Where products come from
+    private List<Queue> inputQueues = new CopyOnWriteArrayList<>(); // Where products come from
 
     @JsonIgnore
-    private Queue outputQueue;      // Where products go to
+    private List<Queue> outputQueues = new CopyOnWriteArrayList<>(); // Where products go to
+
+    public void addInputQueue(Queue queue) {
+        if (!inputQueues.contains(queue)) {
+            inputQueues.add(queue);
+        }
+    }
+
+    public void removeInputQueue(Queue queue) {
+        inputQueues.remove(queue);
+    }
+
+    public void addOutputQueue(Queue queue) {
+        if (!outputQueues.contains(queue)) {
+            outputQueues.add(queue);
+        }
+    }
+
+    public void removeOutputQueue(Queue queue) {
+        outputQueues.remove(queue);
+    }
+
+    public List<Queue> getInputQueues() {
+        return inputQueues;
+    }
+
+    public List<Queue> getOutputQueues() {
+        return outputQueues;
+    }
 
     @JsonIgnore
     private volatile boolean isRunning = false;
@@ -105,8 +135,12 @@ public class Machine implements MachineObserver, Runnable {
         while (isRunning) {
             try {
                 // Register to input queue if ready and idle
-                if (ready && inputQueue != null && !inputQueue.isEmpty()) {
-                    inputQueue.registerObserver(this);
+                if (ready && !inputQueues.isEmpty()) {
+                    for (Queue q : inputQueues) {
+                        if (!q.isEmpty()) {
+                            q.registerObserver(this);
+                        }
+                    }
                 }
 
                 Thread.sleep(100); // Check every 100ms

@@ -119,6 +119,8 @@ public class SimulationManager implements SimulationOriginator {
         System.out.println("🏗️ SimulationManager initialized with Broadcaster");
     }
 
+    private final Random random = new Random(); // Added Random instance
+
     // ========================================================================
     // QUEUE MANAGEMENT
     // ========================================================================
@@ -144,11 +146,21 @@ public class SimulationManager implements SimulationOriginator {
     }
 
     public void removeQueue(String id) {
+        // Identify all connections linked to this queue
+        List<Connection> toRemove = new ArrayList<>();
+        for (Connection conn : connections) {
+            if (conn.getFromId().equals(id) || conn.getToId().equals(id)) {
+                toRemove.add(conn);
+            }
+        }
+
+        // Properly delete each connection to clean up machine references
+        for (Connection conn : toRemove) {
+            deleteConnection(conn.getFromId(), conn.getToId());
+        }
+
         Queue removed = queues.remove(id);
         if (removed != null) {
-            // Remove all connections involving this queue
-            connections.removeIf(conn -> conn.getFromId().equals(id) || conn.getToId().equals(id));
-
             System.out.println("🗑️ Queue removed: " + id);
         }
     }
@@ -193,8 +205,8 @@ public class SimulationManager implements SimulationOriginator {
             connections.removeIf(conn -> conn.getFromId().equals(id) || conn.getToId().equals(id));
 
             // Unregister from queues
-            if (removed.getInputQueue() != null) {
-                removed.getInputQueue().unregisterObserver(removed);
+            for (Queue queue : removed.getInputQueues()) {
+                queue.unregisterObserver(removed);
             }
             System.out.println("🗑️ Machine removed: " + id);
         }
@@ -248,14 +260,14 @@ public class SimulationManager implements SimulationOriginator {
         if (fromType == 'Q' && toType == 'M') {
             Queue queue = queues.get(fromId);
             Machine machine = machines.get(toId);
-            machine.setInputQueue(queue);
+            machine.addInputQueue(queue); // Use addInputQueue
             queue.registerObserver(machine);
             System.out.println("🔗 Connected: Queue " + fromId + " → Machine " + toId);
             System.out.println("   Observer Pattern: " + toId + " now observes " + fromId);
         } else if (fromType == 'M' && toType == 'Q') {
             Machine machine = machines.get(fromId);
             Queue queue = queues.get(toId);
-            machine.setOutputQueue(queue);
+            machine.addOutputQueue(queue); // Use addOutputQueue
             System.out.println("🔗 Connected: Machine " + fromId + " → Queue " + toId);
         }
 
@@ -277,12 +289,13 @@ public class SimulationManager implements SimulationOriginator {
             Machine machine = machines.get(toId);
             if (queue != null && machine != null) {
                 queue.unregisterObserver(machine);
-                machine.setInputQueue(null);
+                machine.removeInputQueue(queue); // Use removeInputQueue
             }
         } else if (fromType == 'M' && toType == 'Q') {
             Machine machine = machines.get(fromId);
-            if (machine != null) {
-                machine.setOutputQueue(null);
+            Queue queue = queues.get(toId);
+            if (machine != null && queue != null) {
+                machine.removeOutputQueue(queue); // Use removeOutputQueue
             }
         }
 
@@ -390,10 +403,19 @@ public class SimulationManager implements SimulationOriginator {
                 if (!isRunning)
                     break;
 
-                // If machine is ready and has input queue, check for products
-                if (machine.isReady() && machine.getInputQueue() != null) {
-                    Queue inputQueue = machine.getInputQueue();
-                    if (!inputQueue.isEmpty()) {
+                // If machine is ready and has input queues, check for products
+                if (machine.isReady() && !machine.getInputQueues().isEmpty()) {
+                    List<Queue> inputQueues = machine.getInputQueues();
+
+                    // Filter non-empty queues
+                    List<Queue> nonEmptyQueues = new ArrayList<>();
+                    for (Queue q : inputQueues) {
+                        if (!q.isEmpty()) {
+                            nonEmptyQueues.add(q);
+                        }
+                    }
+
+                    if (!nonEmptyQueues.isEmpty()) {
 
                         // 🚫 DO NOT take product if paused or stopped - with synchronized check
                         synchronized (this) {
@@ -409,7 +431,9 @@ public class SimulationManager implements SimulationOriginator {
                             continue;
                         }
 
-                        Product product = inputQueue.dequeue();
+                        // Randomly select one non-empty queue
+                        Queue selectedQueue = nonEmptyQueues.get(random.nextInt(nonEmptyQueues.size()));
+                        Product product = selectedQueue.dequeue();
 
                         if (product != null) {
                             processProductOnMachine(machine, product);
@@ -422,12 +446,15 @@ public class SimulationManager implements SimulationOriginator {
                             // BROADCAST QUEUE UPDATE (Dequeued)
                             if (broadcaster != null) {
                                 broadcaster.broadcastQueueUpdate(new com.example.producuctionLine.dto.QueueUpdateDTO(
-                                        inputQueue.getId(),
-                                        inputQueue.getProducts().size()));
+                                        selectedQueue.getId(),
+                                        selectedQueue.getProducts().size()));
                             }
                         }
                     } else {
-                        inputQueue.registerObserver(machine);
+                        // Register observer to all queues
+                        for (Queue q : inputQueues) {
+                            q.registerObserver(machine);
+                        }
                     }
                 }
 
@@ -458,8 +485,12 @@ public class SimulationManager implements SimulationOriginator {
 
         // ⏸️ IMMEDIATE PAUSE CHECK
         if (isPaused) {
-            if (machine.getInputQueue() != null && product != null) {
-                machine.getInputQueue().enqueue(product);
+            // Can't easily return to "original" queue if we don't track it,
+            // but for simplicity we can just try to find a queue or hold it.
+            // Better strategy: put it back in one of the input queues (randomly or first
+            // valid)
+            if (!machine.getInputQueues().isEmpty() && product != null) {
+                machine.getInputQueues().get(0).enqueue(product); // Put back to first queue
                 System.out.println("⏸️  " + machine.getName() + " returned product to queue (paused)");
             }
             resetMachine(machine);
@@ -467,8 +498,8 @@ public class SimulationManager implements SimulationOriginator {
         }
 
         if (!isRunning) {
-            if (machine.getInputQueue() != null && product != null) {
-                machine.getInputQueue().enqueue(product);
+            if (!machine.getInputQueues().isEmpty() && product != null) {
+                machine.getInputQueues().get(0).enqueue(product);
             }
             resetMachine(machine);
             return;
@@ -518,8 +549,8 @@ public class SimulationManager implements SimulationOriginator {
                 while (isPaused) {
                     Thread.sleep(10);
                     if (!isRunning) {
-                        if (machine.getInputQueue() != null && product != null) {
-                            machine.getInputQueue().enqueue(product);
+                        if (!machine.getInputQueues().isEmpty() && product != null) {
+                            machine.getInputQueues().get(0).enqueue(product);
                         }
                         resetMachine(machine);
 
@@ -540,8 +571,8 @@ public class SimulationManager implements SimulationOriginator {
             }
 
             if (!isRunning) {
-                if (machine.getInputQueue() != null && product != null) {
-                    machine.getInputQueue().enqueue(product);
+                if (!machine.getInputQueues().isEmpty() && product != null) {
+                    machine.getInputQueues().get(0).enqueue(product);
                 }
                 resetMachine(machine);
 
@@ -571,8 +602,8 @@ public class SimulationManager implements SimulationOriginator {
 
             synchronized (this) {
                 if (!isRunning || isPaused) {
-                    if (machine.getInputQueue() != null) {
-                        machine.getInputQueue().enqueue(product);
+                    if (!machine.getInputQueues().isEmpty()) {
+                        machine.getInputQueues().get(0).enqueue(product);
                     }
                     resetMachine(machine);
 
@@ -587,16 +618,20 @@ public class SimulationManager implements SimulationOriginator {
             }
 
             // Move to output queue
-            if (machine.getOutputQueue() != null) {
-                machine.getOutputQueue().enqueue(product);
+            List<Queue> outputQueues = machine.getOutputQueues();
+            if (!outputQueues.isEmpty()) {
+                // Randomly select one output queue
+                Queue selectedOutput = outputQueues.get(random.nextInt(outputQueues.size()));
+                selectedOutput.enqueue(product);
+
                 totalProductsProcessed++;
                 System.out.println("📤 " + machine.getName() + " sent product to " +
-                        machine.getOutputQueue().getId());
+                        selectedOutput.getId());
 
                 if (broadcaster != null) {
                     broadcaster.broadcastQueueUpdate(new QueueUpdateDTO(
-                            machine.getOutputQueue().getId(),
-                            machine.getOutputQueue().getProducts().size()));
+                            selectedOutput.getId(),
+                            selectedOutput.getProducts().size()));
                 }
             } else {
                 System.out.println("⚠️  " + machine.getName() + " has no output queue - product completed");
@@ -619,8 +654,8 @@ public class SimulationManager implements SimulationOriginator {
             broadcastStatistics();
 
         } catch (InterruptedException e) {
-            if (machine.getInputQueue() != null && product != null) {
-                machine.getInputQueue().enqueue(product);
+            if (!machine.getInputQueues().isEmpty() && product != null) {
+                machine.getInputQueues().get(0).enqueue(product);
             }
             resetMachine(machine);
 
@@ -834,9 +869,10 @@ public class SimulationManager implements SimulationOriginator {
         pauseStartTime = System.currentTimeMillis();
         System.out.println("⏸️  Simulation PAUSED");
         // 🆕 CRITICAL: Unregister all machines as observers from queues
+        // 🆕 CRITICAL: Unregister all machines as observers from queues
         for (Machine machine : machines.values()) {
-            if (machine.getInputQueue() != null) {
-                machine.getInputQueue().unregisterObserver(machine);
+            for (Queue q : machine.getInputQueues()) {
+                q.unregisterObserver(machine);
             }
         }
 
@@ -861,9 +897,10 @@ public class SimulationManager implements SimulationOriginator {
         System.out.println("▶️  Simulation RESUMED");
 
         // 🆕 CRITICAL: Re-register all machines as observers
+        // 🆕 CRITICAL: Re-register all machines as observers
         for (Machine machine : machines.values()) {
-            if (machine.getInputQueue() != null) {
-                machine.getInputQueue().registerObserver(machine);
+            for (Queue q : machine.getInputQueues()) {
+                q.registerObserver(machine);
             }
         }
 
@@ -1040,12 +1077,18 @@ public class SimulationManager implements SimulationOriginator {
             ms.setReady(machine.isReady());
 
             // Capture queue references
-            if (machine.getInputQueue() != null) {
-                ms.setInputQueueId(machine.getInputQueue().getId());
+            // Capture queue references
+            java.util.List<String> inIds = new ArrayList<>();
+            for (Queue q : machine.getInputQueues()) {
+                inIds.add(q.getId());
             }
-            if (machine.getOutputQueue() != null) {
-                ms.setOutputQueueId(machine.getOutputQueue().getId());
+            ms.setInputQueueIds(inIds);
+
+            java.util.List<String> outIds = new ArrayList<>();
+            for (Queue q : machine.getOutputQueues()) {
+                outIds.add(q.getId());
             }
+            ms.setOutputQueueIds(outIds);
 
             // Capture current product if processing
             if (machine.getCurrentProduct() != null) {
@@ -1176,14 +1219,14 @@ public class SimulationManager implements SimulationOriginator {
                 Queue queue = queues.get(cs.getFromId());
                 Machine machine = machines.get(cs.getToId());
                 if (queue != null && machine != null) {
-                    machine.setInputQueue(queue);
+                    machine.addInputQueue(queue);
                     queue.registerObserver(machine);
                 }
             } else if (fromType == 'M' && toType == 'Q') {
                 Machine machine = machines.get(cs.getFromId());
                 Queue queue = queues.get(cs.getToId());
                 if (machine != null && queue != null) {
-                    machine.setOutputQueue(queue);
+                    machine.addOutputQueue(queue);
                 }
             }
         }
