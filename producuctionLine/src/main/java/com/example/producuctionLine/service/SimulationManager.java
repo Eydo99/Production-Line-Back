@@ -423,8 +423,7 @@ public class SimulationManager implements SimulationOriginator {
                             if (broadcaster != null) {
                                 broadcaster.broadcastQueueUpdate(new com.example.producuctionLine.dto.QueueUpdateDTO(
                                         inputQueue.getId(),
-                                        inputQueue.getProducts().size()
-                                ));
+                                        inputQueue.getProducts().size()));
                             }
                         }
                     } else {
@@ -450,9 +449,10 @@ public class SimulationManager implements SimulationOriginator {
     /**
      * Process product on machine - now checks for pause/stop during sleep
      */
-// In SimulationManager.java - Updated processProductOnMachine method
+    // In SimulationManager.java - Updated processProductOnMachine method
 
-    // Add this enhanced logging to processProductOnMachine in SimulationManager.java
+    // Add this enhanced logging to processProductOnMachine in
+    // SimulationManager.java
 
     private void processProductOnMachine(Machine machine, Product product) {
 
@@ -596,8 +596,7 @@ public class SimulationManager implements SimulationOriginator {
                 if (broadcaster != null) {
                     broadcaster.broadcastQueueUpdate(new QueueUpdateDTO(
                             machine.getOutputQueue().getId(),
-                            machine.getOutputQueue().getProducts().size()
-                    ));
+                            machine.getOutputQueue().getProducts().size()));
                 }
             } else {
                 System.out.println("⚠️  " + machine.getName() + " has no output queue - product completed");
@@ -635,6 +634,7 @@ public class SimulationManager implements SimulationOriginator {
             Thread.currentThread().interrupt();
         }
     }
+
     /**
      * Helper method to reset machine to idle state
      */
@@ -703,6 +703,13 @@ public class SimulationManager implements SimulationOriginator {
 
                         firstQueue.enqueue(product);
 
+                        // BROADCAST QUEUE UPDATE (Replayed Product)
+                        if (broadcaster != null) {
+                            broadcaster.broadcastQueueUpdate(new com.example.producuctionLine.dto.QueueUpdateDTO(
+                                    firstQueue.getId(),
+                                    firstQueue.getProducts().size()));
+                        }
+
                         System.out.println("🔁 Replayed product #" + totalProductsGenerated +
                                 ": " + product.getId() +
                                 " (color: " + product.getColor() + ") → " + firstQueue.getId());
@@ -737,8 +744,7 @@ public class SimulationManager implements SimulationOriginator {
                     if (broadcaster != null) {
                         broadcaster.broadcastQueueUpdate(new com.example.producuctionLine.dto.QueueUpdateDTO(
                                 firstQueue.getId(),
-                                firstQueue.getProducts().size()
-                        ));
+                                firstQueue.getProducts().size()));
                     }
 
                     broadcastStatistics();
@@ -1226,7 +1232,44 @@ public class SimulationManager implements SimulationOriginator {
         this.isReplayMode = true;
         this.productsToReplay = new ArrayList<>(snapshot.getGeneratedProductsRecord());
         this.replayIndex = 0;
+
+        // CRITICAL: Clear current state for clean replay
+        // Unlike restoreFromSnapshot, we want EMPTINESS to start replaying INTO
+        for (Queue queue : queues.values()) {
+            queue.getProducts().clear();
+        }
+
+        for (Machine machine : machines.values()) {
+            resetMachine(machine);
+        }
+
+        totalProductsGenerated = 0;
+        totalProductsProcessed = 0;
+        simulationStartTime = 0;
+
+        // Broadcast the "clear" to frontend so it wipes the canvas visuals
+        if (broadcaster != null) {
+            for (Queue queue : queues.values()) {
+                broadcaster.broadcastQueueUpdate(new com.example.producuctionLine.dto.QueueUpdateDTO(
+                        queue.getId(), 0));
+            }
+            for (Machine machine : machines.values()) {
+                broadcaster.broadcastMachineUpdate(new com.example.producuctionLine.dto.MachineUpdateDTO(
+                        machine.getName(), "idle", machine.getDefaultColor()));
+            }
+        }
+
         System.out.println("🔁 Replay mode enabled with " + productsToReplay.size() + " recorded products");
+    }
+
+    public Map<String, Object> getReplayStatus() {
+        return Map.of(
+                "isReplayMode", isReplayMode,
+                "isRunning", isRunning,
+                "totalProducts", productsToReplay.size(),
+                "replayIndex", replayIndex,
+                "productsReplayed", replayIndex,
+                "productsRemaining", productsToReplay.size() - replayIndex);
     }
 
     /**

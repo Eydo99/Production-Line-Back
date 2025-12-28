@@ -265,4 +265,18 @@ public class SimulationController {
                     "status", "error"));
         }
     }
+
+    /**
+     * Get replay status
+     * GET /api/simulation/replay/status
+     */
+    @GetMapping("/replay/status")
+    public ResponseEntity<?> getReplayStatus() {
+        try {
+            return ResponseEntity.ok(manager.getReplayStatus());
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "error", e.getMessage()));
+        }
+    }
 }
