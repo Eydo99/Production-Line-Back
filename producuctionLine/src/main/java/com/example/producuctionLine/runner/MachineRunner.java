@@ -1,7 +1,6 @@
 package com.example.producuctionLine.runner;
 
 import com.example.producuctionLine.dto.MachineUpdateDTO;
-import com.example.producuctionLine.dto.QueueUpdateDTO;
 import com.example.producuctionLine.model.Machine;
 import com.example.producuctionLine.model.Product;
 import com.example.producuctionLine.model.Queue;
@@ -113,11 +112,9 @@ public class MachineRunner implements Runnable {
                                 break;
                             }
 
-                            // BROADCAST QUEUE UPDATE (Dequeued)
+                            // ✅ FIXED: BROADCAST QUEUE UPDATE - Pass Queue object with products
                             if (broadcaster != null) {
-                                broadcaster.broadcastQueueUpdate(new QueueUpdateDTO(
-                                        selectedQueue.getId(),
-                                        selectedQueue.getProducts().size()));
+                                broadcaster.broadcastQueueUpdate(selectedQueue);
                             }
                         }
                     } else {
@@ -273,10 +270,9 @@ public class MachineRunner implements Runnable {
                 statisticsService.incrementProductsProcessed();
                 System.out.println("📤 " + machine.getName() + " sent product to " + selectedOutput.getId());
 
+                // ✅ FIXED: BROADCAST QUEUE UPDATE - Pass Queue object with products
                 if (broadcaster != null) {
-                    broadcaster.broadcastQueueUpdate(new QueueUpdateDTO(
-                            selectedOutput.getId(),
-                            selectedOutput.getProducts().size()));
+                    broadcaster.broadcastQueueUpdate(selectedOutput);
                 }
             } else {
                 System.out.println("⚠️  " + machine.getName() + " has no output queue - product completed");

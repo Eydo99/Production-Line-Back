@@ -1,6 +1,5 @@
 package com.example.producuctionLine.runner;
 
-import com.example.producuctionLine.dto.QueueUpdateDTO;
 import com.example.producuctionLine.model.Product;
 import com.example.producuctionLine.model.Queue;
 import com.example.producuctionLine.model.snapshot.ProductSnapshot;
@@ -129,11 +128,9 @@ public class ProductGenerator implements Runnable {
 
                         firstQueue.enqueue(product);
 
-                        // BROADCAST QUEUE UPDATE (Replayed Product)
+                        // ✅ FIXED: BROADCAST QUEUE UPDATE - Pass Queue object with products
                         if (broadcaster != null) {
-                            broadcaster.broadcastQueueUpdate(new QueueUpdateDTO(
-                                    firstQueue.getId(),
-                                    firstQueue.getProducts().size()));
+                            broadcaster.broadcastQueueUpdate(firstQueue);
                         }
 
                         System.out.println("🔁 Replayed product #" + statisticsService.getTotalProductsGenerated() +
@@ -166,11 +163,9 @@ public class ProductGenerator implements Runnable {
                             ": " + product.getId() +
                             " (color: " + product.getColor() + ") → " + firstQueue.getId());
 
-                    // BROADCAST QUEUE UPDATE (Generated Product Enqueued)
+                    // ✅ FIXED: BROADCAST QUEUE UPDATE - Pass Queue object with products
                     if (broadcaster != null) {
-                        broadcaster.broadcastQueueUpdate(new QueueUpdateDTO(
-                                firstQueue.getId(),
-                                firstQueue.getProducts().size()));
+                        broadcaster.broadcastQueueUpdate(firstQueue);
                     }
 
                     broadcastStatisticsCallback.run();

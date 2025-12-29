@@ -4,28 +4,48 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import com.example.producuctionLine.dto.MachineUpdateDTO;
 import com.example.producuctionLine.dto.QueueUpdateDTO;
+import com.example.producuctionLine.model.Queue;
+import java.util.stream.Collectors;
 
 @Service
 public class WebSocketBroadcaster {
-
+    
     private final SimpMessagingTemplate messagingTemplate;
-
+    
     public WebSocketBroadcaster(SimpMessagingTemplate messagingTemplate) {
         this.messagingTemplate = messagingTemplate;
         System.out.println("✅ WebSocketBroadcaster initialized");
     }
-
-    public void broadcastQueueUpdate(QueueUpdateDTO update) {
+    
+    /**
+     * Broadcast queue update - ALWAYS takes Queue object to ensure products are included
+     * This is the ONLY method you should call from your code
+     */
+    public void broadcastQueueUpdate(Queue queue) {
         try {
-            System.out.println("📡 Broadcasting Queue Update: " + update);
+            // Convert ALL products to DTOs with colors
+            var productDTOs = queue.getProductList().stream()
+                .map(QueueUpdateDTO.ProductDTO::fromProduct)
+                .collect(Collectors.toList());
+            
+            QueueUpdateDTO update = new QueueUpdateDTO(
+                queue.getId(),
+                queue.size(),
+                productDTOs  // ALWAYS include products
+            );
+            
+            System.out.println("📡 Broadcasting Queue Update: " + queue.getId() + 
+                             " (size: " + update.getCurrentSize() + 
+                             ", products: " + productDTOs.size() + ")");
+            
             messagingTemplate.convertAndSend("/topic/queues", update);
-            System.out.println("✅ Queue update sent successfully");
+            
         } catch (Exception e) {
             System.err.println("❌ Failed to broadcast queue update: " + e.getMessage());
             e.printStackTrace();
         }
     }
-
+    
     public void broadcastMachineUpdate(MachineUpdateDTO update) {
         try {
             System.out.println("📡 Broadcasting Machine Update: " + update);
@@ -36,10 +56,9 @@ public class WebSocketBroadcaster {
             e.printStackTrace();
         }
     }
-
+    
     public void broadcastStatistics(java.util.Map<String, Object> stats) {
         try {
-            // System.out.println("📡 Broadcasting Statistics: " + stats);
             messagingTemplate.convertAndSend("/topic/statistics", (Object) stats);
         } catch (Exception e) {
             System.err.println("❌ Failed to broadcast statistics: " + e.getMessage());

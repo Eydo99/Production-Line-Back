@@ -1,7 +1,6 @@
 package com.example.producuctionLine.service;
 
 import com.example.producuctionLine.dto.MachineUpdateDTO;
-import com.example.producuctionLine.dto.QueueUpdateDTO;
 import com.example.producuctionLine.model.Machine;
 import com.example.producuctionLine.model.Queue;
 import com.example.producuctionLine.model.snapshot.ProductSnapshot;
@@ -59,9 +58,10 @@ public class ReplayService {
         }
 
         // Broadcast the "clear" to frontend so it wipes the canvas visuals
+        // FIXED: Use Queue object instead of DTO constructor
         if (broadcaster != null) {
             for (Queue queue : queues.values()) {
-                broadcaster.broadcastQueueUpdate(new QueueUpdateDTO(queue.getId(), 0));
+                broadcaster.broadcastQueueUpdate(queue);
             }
             for (Machine machine : machines.values()) {
                 broadcaster.broadcastMachineUpdate(new MachineUpdateDTO(

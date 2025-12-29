@@ -5,10 +5,12 @@ import com.example.producuctionLine.Obserevers.MachineObserver;
 import com.example.producuctionLine.Obserevers.Observable;
 import lombok.Data;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.stream.Collectors;
 
 /**
  * Queue entity - holds products and notifies observers
@@ -21,7 +23,7 @@ public class Queue implements Observable {
     private double y;
     
     // Thread-safe queue for products
-    @JsonIgnore // Don't serialize in REST responses
+    @JsonIgnore // Don't serialize the BlockingQueue directly
     private BlockingQueue<Product> products;
     
     // Thread-safe list of observers
@@ -52,7 +54,7 @@ public class Queue implements Observable {
     @Override
     public void unregisterObserver(MachineObserver observer) {
         observers.remove(observer);
-        System.out.println("âŒ Observer unregistered from " + id);
+        System.out.println("❌ Observer unregistered from " + id);
     }
     
     @Override
@@ -105,5 +107,13 @@ public class Queue implements Observable {
      */
     public int getCurrentSize() {
         return size();
+    }
+    
+    /**
+     * Get product list for JSON serialization
+     * Returns list of products with their colors
+     */
+    public List<Product> getProductList() {
+        return new ArrayList<>(products);
     }
 }
