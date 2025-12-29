@@ -37,7 +37,13 @@ public class WebSocketBroadcaster {
         }
     }
 
-    public void broadcastStatistics() {
-        // TODO: Implement statistics broadcasting if needed
+    public void broadcastStatistics(java.util.Map<String, Object> stats) {
+        try {
+            // System.out.println("📡 Broadcasting Statistics: " + stats);
+            messagingTemplate.convertAndSend("/topic/statistics", (Object) stats);
+        } catch (Exception e) {
+            System.err.println("❌ Failed to broadcast statistics: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 }

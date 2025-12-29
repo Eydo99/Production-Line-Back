@@ -142,13 +142,9 @@ public class SimulationController {
     @GetMapping("/statistics")
     public ResponseEntity<?> getStatistics() {
         try {
-            return ResponseEntity.ok(Map.of(
-                    "totalGenerated", manager.getTotalProductsGenerated(),
-                    "totalProcessed", manager.getTotalProductsProcessed(),
-                    "duration", manager.getSimulationDuration(),
-                    "avgQueueLength", manager.getAverageQueueLength(),
-                    "isRunning", manager.isRunning(),
-                    "isPaused", manager.isPaused()));
+            // Use the consolidated getStatistics() method which returns all stats
+            Map<String, Object> stats = manager.getStatistics();
+            return ResponseEntity.ok(stats);
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of(
                     "error", e.getMessage()));

@@ -22,9 +22,17 @@ public class Machine implements MachineObserver, Runnable {
     private double x;
     private double y;
 
+    /**
+     * -- GETTER --
+     *  Get status for JSON serialization
+     */
     // ========== STATUS ==========
     private String status = "idle"; // "idle", "processing", "error"
     private String currentTask; // Display current product ID
+    /**
+     * -- GETTER --
+     *  Check if machine is ready
+     */
     private boolean ready = true; // Is machine ready for next product
 
     // ========== APPEARANCE ==========
@@ -62,14 +70,6 @@ public class Machine implements MachineObserver, Runnable {
 
     public void removeOutputQueue(Queue queue) {
         outputQueues.remove(queue);
-    }
-
-    public List<Queue> getInputQueues() {
-        return inputQueues;
-    }
-
-    public List<Queue> getOutputQueues() {
-        return outputQueues;
     }
 
     @JsonIgnore
@@ -111,20 +111,6 @@ public class Machine implements MachineObserver, Runnable {
      */
     private int generateServiceTime() {
         return new Random().nextInt(4000) + 1000;
-    }
-
-    /**
-     * Get status for JSON serialization
-     */
-    public String getStatus() {
-        return status;
-    }
-
-    /**
-     * Check if machine is ready
-     */
-    public boolean isReady() {
-        return ready;
     }
 
     @Override

@@ -44,6 +44,9 @@ public class SimulationSnapshot {
     // Each product stores: id, color, and relative time when it was generated
     private List<ProductSnapshot> generatedProductsRecord = new ArrayList<>();
 
+    // Seed for deterministic replay of random decisions (e.g. routing)
+    private long randomSeed;
+
     /**
      * Check if this snapshot is valid for replay
      */
