@@ -15,13 +15,10 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.*;
 
-
 @Service
 public class SimulationManager implements SimulationOriginator {
 
-
     private final WebSocketBroadcaster broadcaster;
-
 
     private final StatisticsService statisticsService;
     private final SnapshotService snapshotService;
@@ -29,26 +26,21 @@ public class SimulationManager implements SimulationOriginator {
     private final ReplayService replayService;
     private final SimulationValidationService validationService;
 
-
     @Getter
     private volatile boolean isRunning = false;
     @Getter
     private volatile boolean isPaused = false;
-
 
     @Getter
     private final Map<String, Queue> queues = new ConcurrentHashMap<>();
     @Getter
     private final Map<String, Machine> machines = new ConcurrentHashMap<>();
 
-
     private Thread productGeneratorThread;
     private final Map<String, Thread> machineThreads = new ConcurrentHashMap<>();
 
-
     private int queueCounter = 0;
     private int machineCounter = 0;
-
 
     private final Random random = new Random();
     private long randomSeed;
@@ -56,28 +48,27 @@ public class SimulationManager implements SimulationOriginator {
     /**
      * Constructor Injection for all services
      */
-   @Autowired
-public SimulationManager(
-        WebSocketBroadcaster broadcaster,
-        StatisticsService statisticsService,
-        SnapshotService snapshotService,
-        ConnectionService connectionService,
-        ReplayService replayService,
-        SimulationValidationService validationService) {  
-    this.broadcaster = broadcaster;
-    this.statisticsService = statisticsService;
-    this.snapshotService = snapshotService;
-    this.connectionService = connectionService;
-    this.replayService = replayService;
-    this.validationService = validationService;  
-    System.out.println("🏗️ SimulationManager initialized with all services");
-}
+    @Autowired
+    public SimulationManager(
+            WebSocketBroadcaster broadcaster,
+            StatisticsService statisticsService,
+            SnapshotService snapshotService,
+            ConnectionService connectionService,
+            ReplayService replayService,
+            SimulationValidationService validationService) {
+        this.broadcaster = broadcaster;
+        this.statisticsService = statisticsService;
+        this.snapshotService = snapshotService;
+        this.connectionService = connectionService;
+        this.replayService = replayService;
+        this.validationService = validationService;
+        System.out.println("🏗️ SimulationManager initialized with all services");
+    }
 
     // ========================================================================
     // QUEUE MANAGEMENT
     // ========================================================================
 
-    
     public Queue addQueue(double x, double y) {
         queueCounter++;
         String id = "Q" + queueCounter;
@@ -110,7 +101,6 @@ public SimulationManager(
     // MACHINE MANAGEMENT
     // ========================================================================
 
-    
     public Machine addMachine(double x, double y) {
         machineCounter++;
         String id = "M" + machineCounter;
@@ -151,7 +141,6 @@ public SimulationManager(
     // CONNECTION MANAGEMENT (Delegated to ConnectionService)
     // ========================================================================
 
-    
     public Connection createConnection(String fromId, String toId) {
         return connectionService.createConnection(fromId, toId, queues, machines);
     }
@@ -168,87 +157,87 @@ public SimulationManager(
     // SIMULATION CONTROL
     // ========================================================================
 
-    
     public synchronized void startSimulation() {
-    if (isRunning) {
-        throw new IllegalStateException("Simulation is already running");
+        if (isRunning) {
+            throw new IllegalStateException("Simulation is already running");
+        }
+
+        // ========== VALIDATION PHASE ==========
+        System.out.println("🔍 Validating simulation configuration...");
+
+        SimulationValidationService.ValidationResult validation = validationService.validateSimulation(queues, machines,
+                connectionService.getConnections());
+
+        if (!validation.isValid()) {
+            System.err.println("❌ Validation failed:");
+            validation.getErrors().forEach(System.err::println);
+
+            // Return detailed error message
+            String errorMessage = String.join("\n", validation.getErrors());
+            throw new IllegalStateException("Cannot start simulation - configuration errors:\n" + errorMessage);
+        }
+
+        // Print warnings if any
+        if (!validation.getWarnings().isEmpty()) {
+            System.out.println("⚠️ Validation warnings:");
+            validation.getWarnings().forEach(System.out::println);
+        }
+
+        System.out.println("✅ Validation passed!");
+        // ========== END VALIDATION ==========
+
+        // Clear all queues from previous run
+        for (Queue queue : queues.values()) {
+            queue.getProducts().clear();
+        }
+
+        if (queues.isEmpty()) {
+            throw new IllegalStateException("Cannot start simulation: No queues exist. Add at least one queue.");
+        }
+
+        if (machines.isEmpty()) {
+            throw new IllegalStateException("Cannot start simulation: No machines exist. Add at least one machine.");
+        }
+
+        if (!connectionService.hasValidPath()) {
+            System.out.println("⚠️ Warning: No complete Q→M→Q path exists. Products may get stuck.");
+        }
+
+        statisticsService.startSimulation();
+
+        // Reset replay mode and clear recorded products for new simulation
+        if (!replayService.isReplayMode()) {
+            replayService.clearRecordedProducts();
+            // Initialize seed for new run
+            randomSeed = System.currentTimeMillis();
+            random.setSeed(randomSeed);
+            System.out.println("🎲 Randomized seed: " + randomSeed);
+        } else {
+            // In replay mode, seed should have been restored from snapshot
+            random.setSeed(randomSeed);
+            System.out.println("🔄 Replay using seed: " + randomSeed);
+        }
+
+        isRunning = true;
+        isPaused = false;
+
+        for (Machine machine : machines.values()) {
+            Thread thread = new Thread(createMachineRunner(machine), machine.getName() + "-Thread");
+            machineThreads.put(machine.getName(), thread);
+            thread.start();
+            System.out.println("🚀 Started thread for " + machine.getName());
+        }
+
+        productGeneratorThread = new Thread(createProductGenerator(), "ProductGenerator");
+        productGeneratorThread.setDaemon(true);
+        productGeneratorThread.start();
+
+        System.out.println("▶️  SIMULATION STARTED");
+        System.out.println("   Machines: " + machines.size() + " (each on separate thread)");
+        System.out.println("   Queues: " + queues.size());
+        System.out.println("   Connections: " + connectionService.getConnectionCount());
     }
 
-    // ========== VALIDATION PHASE ==========
-    System.out.println("🔍 Validating simulation configuration...");
-    
-    SimulationValidationService.ValidationResult validation = 
-        validationService.validateSimulation(queues, machines, connectionService.getConnections());
-
-    if (!validation.isValid()) {
-        System.err.println("❌ Validation failed:");
-        validation.getErrors().forEach(System.err::println);
-        
-        // Return detailed error message
-        String errorMessage = String.join("\n", validation.getErrors());
-        throw new IllegalStateException("Cannot start simulation - configuration errors:\n" + errorMessage);
-    }
-
-    // Print warnings if any
-    if (!validation.getWarnings().isEmpty()) {
-        System.out.println("⚠️ Validation warnings:");
-        validation.getWarnings().forEach(System.out::println);
-    }
-
-    System.out.println("✅ Validation passed!");
-    // ========== END VALIDATION ==========
-
-    // Clear all queues from previous run
-    for (Queue queue : queues.values()) {
-        queue.getProducts().clear();
-    }
-
-    if (queues.isEmpty()) {
-        throw new IllegalStateException("Cannot start simulation: No queues exist. Add at least one queue.");
-    }
-
-    if (machines.isEmpty()) {
-        throw new IllegalStateException("Cannot start simulation: No machines exist. Add at least one machine.");
-    }
-
-    if (!connectionService.hasValidPath()) {
-        System.out.println("⚠️ Warning: No complete Q→M→Q path exists. Products may get stuck.");
-    }
-
-    statisticsService.startSimulation();
-
-    // Reset replay mode and clear recorded products for new simulation
-    if (!replayService.isReplayMode()) {
-        replayService.clearRecordedProducts();
-        // Initialize seed for new run
-        randomSeed = System.currentTimeMillis();
-        random.setSeed(randomSeed);
-        System.out.println("🎲 Randomized seed: " + randomSeed);
-    } else {
-        // In replay mode, seed should have been restored from snapshot
-        random.setSeed(randomSeed);
-        System.out.println("🔄 Replay using seed: " + randomSeed);
-    }
-
-    isRunning = true;
-    isPaused = false;
-
-    for (Machine machine : machines.values()) {
-        Thread thread = new Thread(createMachineRunner(machine), machine.getName() + "-Thread");
-        machineThreads.put(machine.getName(), thread);
-        thread.start();
-        System.out.println("🚀 Started thread for " + machine.getName());
-    }
-
-    productGeneratorThread = new Thread(createProductGenerator(), "ProductGenerator");
-    productGeneratorThread.setDaemon(true);
-    productGeneratorThread.start();
-
-    System.out.println("▶️  SIMULATION STARTED");
-    System.out.println("   Machines: " + machines.size() + " (each on separate thread)");
-    System.out.println("   Queues: " + queues.size());
-    System.out.println("   Connections: " + connectionService.getConnectionCount());
-}
     private void startMachineThread(Machine machine) {
         Thread thread = new Thread(createMachineRunner(machine), machine.getName() + "-Thread");
         thread.setDaemon(true);
@@ -291,7 +280,6 @@ public SimulationManager(
                 this::broadcastStatistics);
     }
 
-    
     private void resetMachine(Machine machine) {
         machine.setCurrentProduct(null);
         machine.setCurrentTask(null);
@@ -308,19 +296,14 @@ public SimulationManager(
 
         System.out.println("⏹️  Stopping simulation...");
 
-        // Auto-save snapshot before stopping (Memento Pattern)
-        if (snapshotService != null) {
-            System.out.println("📸 Auto-saving snapshot before stop...");
-            createSnapshot();
-        }
-
-        // Set flag to stop all threads
+        // Set flag to stop all threads FIRST
         isRunning = false;
         isPaused = false;
 
         // Disable replay mode when simulation stops
         replayService.disableReplayMode();
 
+        // Stop the product generator first
         if (productGeneratorThread != null && productGeneratorThread.isAlive()) {
             productGeneratorThread.interrupt();
             try {
@@ -331,13 +314,32 @@ public SimulationManager(
             }
         }
 
+        // Wait for all machine threads to finish their current processing
+        // This ensures products are pushed to output queues before snapshot
+        System.out.println("⏳ Waiting for all machines to finish processing...");
         for (Thread thread : machineThreads.values()) {
-            thread.interrupt();
+            try {
+                // Wait for each thread to finish naturally (they check isRunning flag)
+                thread.join(5000); // Wait up to 5 seconds per machine
+                if (thread.isAlive()) {
+                    thread.interrupt(); // Force interrupt if still running
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
         machineThreads.clear();
 
+        // Reset all machines to idle state
         for (Machine machine : machines.values()) {
             resetMachine(machine);
+        }
+
+        // NOW take the snapshot AFTER all machines have finished processing
+        // This ensures the snapshot captures the final state with products in queues
+        if (snapshotService != null) {
+            System.out.println("📸 Auto-saving snapshot after all machines stopped...");
+            createSnapshot();
         }
 
         long duration = statisticsService.getSimulationDuration(false);
@@ -392,8 +394,6 @@ public SimulationManager(
         System.out.println("▶️  Simulation RESUMED (observers re-registered)");
     }
 
-    
-
     private Queue getFirstQueue() {
         return queues.values().stream()
                 .min((q1, q2) -> q1.getId().compareTo(q2.getId()))
@@ -405,8 +405,6 @@ public SimulationManager(
             broadcaster.broadcastStatistics(getStatistics());
         }
     }
-
-    
 
     public long getSimulationDuration() {
         return statisticsService.getSimulationDuration(isPaused);
@@ -455,7 +453,6 @@ public SimulationManager(
     // SNAPSHOT (Memento Pattern) - For Simulation Replay
     // ========================================================================
 
-    
     public synchronized SimulationSnapshot createSnapshot() {
         SimulationSnapshot snapshot = snapshotService.createSnapshot(
                 queues,
@@ -477,7 +474,6 @@ public SimulationManager(
         return snapshot;
     }
 
-    
     public synchronized void restoreFromSnapshot(SimulationSnapshot snapshot) {
         if (isRunning) {
             throw new IllegalStateException(
@@ -501,17 +497,14 @@ public SimulationManager(
         statisticsService.setStates(result.totalProductsGenerated, result.totalProductsProcessed);
     }
 
-    
     public boolean hasSnapshot() {
         return snapshotService.hasSnapshot();
     }
 
-    
     public SimulationSnapshot getLastSnapshot() {
         return snapshotService.getLastSnapshot();
     }
 
-    
     public SimulationCaretaker getCaretaker() {
         return snapshotService.getCaretaker();
     }
@@ -520,7 +513,6 @@ public SimulationManager(
     // REPLAY MODE (Delegated to ReplayService)
     // ========================================================================
 
-    
     public void setupReplayMode(SimulationSnapshot snapshot) {
         replayService.setupReplayMode(snapshot, queues, machines, this::resetMachine);
     }
