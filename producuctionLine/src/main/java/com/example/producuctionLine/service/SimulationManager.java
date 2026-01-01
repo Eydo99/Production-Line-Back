@@ -15,52 +15,41 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.*;
 
-/**
- * Singleton class to manage entire simulation
- * Coordinates all queues, machines, and connections
- * Implements Concurrency Design Pattern and Memento Pattern (Originator role)
- * Memento Pattern Participants:
- * - Originator: SimulationManager (this class) - creates and restores from
- * snapshots
- * - Memento: SimulationSnapshot - stores the state
- * - Caretaker: SimulationCaretaker - manages snapshot history
- *
- * @author Person 3 - Simulation Control
- */
+
 @Service
 public class SimulationManager implements SimulationOriginator {
 
-    // ========== WEBSOCKET BROADCASTER ==========
+
     private final WebSocketBroadcaster broadcaster;
 
-    // ========== SERVICES (Refactored) ==========
+
     private final StatisticsService statisticsService;
     private final SnapshotService snapshotService;
     private final ConnectionService connectionService;
     private final ReplayService replayService;
     private final SimulationValidationService validationService;
 
-    // ========== SIMULATION STATE ==========
+
     @Getter
     private volatile boolean isRunning = false;
     @Getter
     private volatile boolean isPaused = false;
 
-    // ========== DATA COLLECTIONS (Thread-safe) ==========
+
     @Getter
     private final Map<String, Queue> queues = new ConcurrentHashMap<>();
     @Getter
     private final Map<String, Machine> machines = new ConcurrentHashMap<>();
 
-    // ========== THREADING ==========
+
     private Thread productGeneratorThread;
     private final Map<String, Thread> machineThreads = new ConcurrentHashMap<>();
 
-    // ========== COUNTERS ==========
+
     private int queueCounter = 0;
     private int machineCounter = 0;
 
-    // ========== RANDOM ==========
+
     private final Random random = new Random();
     private long randomSeed;
 
@@ -74,13 +63,13 @@ public SimulationManager(
         SnapshotService snapshotService,
         ConnectionService connectionService,
         ReplayService replayService,
-        SimulationValidationService validationService) {  // ← ADD THIS PARAMETER
+        SimulationValidationService validationService) {  
     this.broadcaster = broadcaster;
     this.statisticsService = statisticsService;
     this.snapshotService = snapshotService;
     this.connectionService = connectionService;
     this.replayService = replayService;
-    this.validationService = validationService;  // ← ADD THIS LINE
+    this.validationService = validationService;  
     System.out.println("🏗️ SimulationManager initialized with all services");
 }
 
@@ -88,13 +77,7 @@ public SimulationManager(
     // QUEUE MANAGEMENT
     // ========================================================================
 
-    /**
-     * Add new queue to simulation
-     * 
-     * @param x X coordinate
-     * @param y Y coordinate
-     * @return Created queue
-     */
+    
     public Queue addQueue(double x, double y) {
         queueCounter++;
         String id = "Q" + queueCounter;
@@ -127,13 +110,7 @@ public SimulationManager(
     // MACHINE MANAGEMENT
     // ========================================================================
 
-    /**
-     * Add new machine to simulation
-     * 
-     * @param x X coordinate
-     * @param y Y coordinate
-     * @return Created machine
-     */
+    
     public Machine addMachine(double x, double y) {
         machineCounter++;
         String id = "M" + machineCounter;
@@ -174,16 +151,7 @@ public SimulationManager(
     // CONNECTION MANAGEMENT (Delegated to ConnectionService)
     // ========================================================================
 
-    /**
-     * Create connection between nodes
-     * Validates Q→M→Q pattern
-     * Implements Observer Pattern wiring
-     *
-     * @param fromId Source node ID (Queue or Machine)
-     * @param toId   Target node ID (Queue or Machine)
-     * @return Created connection
-     * @throws IllegalArgumentException if connection is invalid
-     */
+    
     public Connection createConnection(String fromId, String toId) {
         return connectionService.createConnection(fromId, toId, queues, machines);
     }
@@ -200,16 +168,7 @@ public SimulationManager(
     // SIMULATION CONTROL
     // ========================================================================
 
-    /**
-     * Start the simulation
-     * Implements Concurrency Design Pattern:
-     * - Each machine runs on its own thread
-     * - Product generator runs on separate thread
-     * - Thread-safe operations throughout
-     *
-     * @throws IllegalStateException if simulation already running or no queues
-     *                               exist
-     */
+    
     public synchronized void startSimulation() {
     if (isRunning) {
         throw new IllegalStateException("Simulation is already running");
@@ -332,9 +291,7 @@ public SimulationManager(
                 this::broadcastStatistics);
     }
 
-    /**
-     * Helper method to reset machine to idle state
-     */
+    
     private void resetMachine(Machine machine) {
         machine.setCurrentProduct(null);
         machine.setCurrentTask(null);
@@ -435,9 +392,7 @@ public SimulationManager(
         System.out.println("▶️  Simulation RESUMED (observers re-registered)");
     }
 
-    // ========================================================================
-    // HELPER METHODS
-    // ========================================================================
+    
 
     private Queue getFirstQueue() {
         return queues.values().stream()
@@ -451,9 +406,7 @@ public SimulationManager(
         }
     }
 
-    // ========================================================================
-    // GETTERS & STATE
-    // ========================================================================
+    
 
     public long getSimulationDuration() {
         return statisticsService.getSimulationDuration(isPaused);
@@ -502,12 +455,7 @@ public SimulationManager(
     // SNAPSHOT (Memento Pattern) - For Simulation Replay
     // ========================================================================
 
-    /**
-     * Create a snapshot of the current simulation state (Memento Pattern)
-     * Captures all queues, machines, connections, products, and counters
-     * 
-     * @return SimulationSnapshot containing the complete simulation state
-     */
+    
     public synchronized SimulationSnapshot createSnapshot() {
         SimulationSnapshot snapshot = snapshotService.createSnapshot(
                 queues,
@@ -529,13 +477,7 @@ public SimulationManager(
         return snapshot;
     }
 
-    /**
-     * Restore simulation state from a snapshot (Memento Pattern)
-     * Clears current state and rebuilds from the snapshot
-     * 
-     * @param snapshot The snapshot to restore from
-     * @throws IllegalStateException if simulation is running or snapshot is invalid
-     */
+    
     public synchronized void restoreFromSnapshot(SimulationSnapshot snapshot) {
         if (isRunning) {
             throw new IllegalStateException(
@@ -559,29 +501,17 @@ public SimulationManager(
         statisticsService.setStates(result.totalProductsGenerated, result.totalProductsProcessed);
     }
 
-    /**
-     * Check if a snapshot exists for replay
-     * 
-     * @return true if a snapshot is available
-     */
+    
     public boolean hasSnapshot() {
         return snapshotService.hasSnapshot();
     }
 
-    /**
-     * Get the last snapshot from the Caretaker
-     * 
-     * @return The last saved snapshot, or null if none exists
-     */
+    
     public SimulationSnapshot getLastSnapshot() {
         return snapshotService.getLastSnapshot();
     }
 
-    /**
-     * Get the Caretaker for advanced snapshot operations (undo/redo)
-     * 
-     * @return The SimulationCaretaker instance
-     */
+    
     public SimulationCaretaker getCaretaker() {
         return snapshotService.getCaretaker();
     }
@@ -590,12 +520,7 @@ public SimulationManager(
     // REPLAY MODE (Delegated to ReplayService)
     // ========================================================================
 
-    /**
-     * Set up replay mode with products from a snapshot
-     * Must be called before startSimulation() for deterministic replay
-     * 
-     * @param snapshot The snapshot containing recorded products
-     */
+    
     public void setupReplayMode(SimulationSnapshot snapshot) {
         replayService.setupReplayMode(snapshot, queues, machines, this::resetMachine);
     }
@@ -604,9 +529,6 @@ public SimulationManager(
         return replayService.getReplayStatus(isRunning);
     }
 
-    /**
-     * Disable replay mode (for normal simulation)
-     */
     public void disableReplayMode() {
         replayService.disableReplayMode();
     }

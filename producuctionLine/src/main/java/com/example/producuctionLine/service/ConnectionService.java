@@ -10,30 +10,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-/**
- * Service to manage connections between queues and machines.
- * Handles connection creation, deletion, and validation.
- * Implements Observer Pattern wiring for Q→M connections.
- * 
- * @author Refactored from SimulationManager
- */
+
 @Service
 public class ConnectionService {
 
     private final List<Connection> connections = new CopyOnWriteArrayList<>();
 
-    /**
-     * Create connection between nodes.
-     * Validates Q→M→Q pattern.
-     * Implements Observer Pattern wiring.
-     *
-     * @param fromId   Source node ID (Queue or Machine)
-     * @param toId     Target node ID (Queue or Machine)
-     * @param queues   Map of all queues
-     * @param machines Map of all machines
-     * @return Created connection
-     * @throws IllegalArgumentException if connection is invalid
-     */
+    
     public Connection createConnection(String fromId, String toId,
             Map<String, Queue> queues,
             Map<String, Machine> machines) {
@@ -84,15 +67,7 @@ public class ConnectionService {
         return connection;
     }
 
-    /**
-     * Delete a connection between nodes.
-     * Cleans up observer registrations and queue references.
-     *
-     * @param fromId   Source node ID
-     * @param toId     Target node ID
-     * @param queues   Map of all queues
-     * @param machines Map of all machines
-     */
+    
     public void deleteConnection(String fromId, String toId,
             Map<String, Queue> queues,
             Map<String, Machine> machines) {
@@ -119,55 +94,32 @@ public class ConnectionService {
         System.out.println("🔌 Connection deleted: " + fromId + " → " + toId);
     }
 
-    /**
-     * Get all connections (returns a defensive copy).
-     *
-     * @return List of all connections
-     */
+    
     public List<Connection> getConnections() {
         return new ArrayList<>(connections);
     }
 
-    /**
-     * Get the internal connection list (for snapshot operations).
-     *
-     * @return The internal connection list
-     */
+    
     public List<Connection> getConnectionsInternal() {
         return connections;
     }
 
-    /**
-     * Clear all connections.
-     */
+    
     public void clearConnections() {
         connections.clear();
     }
 
-    /**
-     * Add a connection directly (used during snapshot restoration).
-     *
-     * @param connection The connection to add
-     */
+    
     public void addConnection(Connection connection) {
         connections.add(connection);
     }
 
-    /**
-     * Remove connections involving a specific node.
-     *
-     * @param nodeId The node ID to remove connections for
-     */
+    
     public void removeConnectionsForNode(String nodeId) {
         connections.removeIf(conn -> conn.getFromId().equals(nodeId) || conn.getToId().equals(nodeId));
     }
 
-    /**
-     * Get connections involving a specific node.
-     *
-     * @param nodeId The node ID
-     * @return List of connections involving this node
-     */
+    
     public List<Connection> getConnectionsForNode(String nodeId) {
         List<Connection> result = new ArrayList<>();
         for (Connection conn : connections) {
@@ -178,21 +130,13 @@ public class ConnectionService {
         return result;
     }
 
-    /**
-     * Check if a valid Q→M path exists.
-     *
-     * @return true if at least one Q→M connection exists
-     */
+    
     public boolean hasValidPath() {
         return connections.stream()
                 .anyMatch(c -> c.getFromId().startsWith("Q") && c.getToId().startsWith("M"));
     }
 
-    /**
-     * Get the connection count.
-     *
-     * @return Number of connections
-     */
+    
     public int getConnectionCount() {
         return connections.size();
     }

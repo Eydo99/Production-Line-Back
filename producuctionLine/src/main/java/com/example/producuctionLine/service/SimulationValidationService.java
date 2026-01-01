@@ -8,16 +8,11 @@ import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/**
- * Service for validating simulation configuration before start
- * Ensures all nodes are properly connected and can function correctly
- */
+
 @Service
 public class SimulationValidationService {
 
-    /**
-     * Validation result container
-     */
+    
     public static class ValidationResult {
         private final boolean isValid;
         private final List<String> errors;

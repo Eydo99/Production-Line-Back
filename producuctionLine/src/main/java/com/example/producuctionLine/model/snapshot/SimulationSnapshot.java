@@ -7,15 +7,7 @@ import lombok.NoArgsConstructor;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Main Simulation Snapshot (Memento Pattern)
- * Captures the complete state of a simulation for replay functionality
- * 
- * This class acts as the Memento in the Memento Design Pattern:
- * - Originator: SimulationManager (creates and restores from snapshots)
- * - Caretaker: SimulationManager (stores the snapshot)
- * - Memento: This class (holds the captured state)
- */
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

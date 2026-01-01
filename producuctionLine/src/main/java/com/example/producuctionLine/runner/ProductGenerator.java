@@ -11,13 +11,7 @@ import java.util.Random;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
-/**
- * Runnable class to handle product generation thread.
- * Supports both random generation and replay mode.
- * Extracted from SimulationManager for better modularity.
- * 
- * @author Refactored
- */
+
 public class ProductGenerator implements Runnable {
 
     private static final int MIN_PRODUCT_DELAY = 1000;
@@ -128,7 +122,7 @@ public class ProductGenerator implements Runnable {
 
                         firstQueue.enqueue(product);
 
-                        // ✅ FIXED: BROADCAST QUEUE UPDATE - Pass Queue object with products
+                        
                         if (broadcaster != null) {
                             broadcaster.broadcastQueueUpdate(firstQueue);
                         }
@@ -163,7 +157,7 @@ public class ProductGenerator implements Runnable {
                             ": " + product.getId() +
                             " (color: " + product.getColor() + ") → " + firstQueue.getId());
 
-                    // ✅ FIXED: BROADCAST QUEUE UPDATE - Pass Queue object with products
+                    
                     if (broadcaster != null) {
                         broadcaster.broadcastQueueUpdate(firstQueue);
                     }

@@ -13,10 +13,7 @@ public class SnapshotService {
 
     private final SimulationCaretaker caretaker = new SimulationCaretaker();
 
-    /**
-     * Result class to hold restoration results that need to be applied to
-     * SimulationManager.
-     */
+    
     public static class RestoreResult {
         public final int queueCounter;
         public final int machineCounter;
@@ -136,17 +133,7 @@ public class SnapshotService {
         return snapshot;
     }
 
-    /**
-     * Restore simulation state from a snapshot.
-     * Populates the provided maps with restored queues, machines, and connections.
-     *
-     * @param snapshot          The snapshot to restore from
-     * @param queues            Map to populate with restored queues
-     * @param machines          Map to populate with restored machines
-     * @param connectionService Service to manage connections
-     * @return RestoreResult containing counters and statistics to apply
-     * @throws IllegalArgumentException if snapshot is invalid
-     */
+    
     public RestoreResult restoreFromSnapshot(
             SimulationSnapshot snapshot,
             Map<String, Queue> queues,
