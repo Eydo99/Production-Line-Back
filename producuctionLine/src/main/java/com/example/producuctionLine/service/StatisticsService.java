@@ -10,13 +10,13 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class StatisticsService {
 
-    // ========== STATISTICS ==========
+    
     @Getter
     private int totalProductsGenerated = 0;
     @Getter
     private int totalProductsProcessed = 0;
 
-    // ========== TIMING ==========
+    
     private long simulationStartTime = 0;
     private long totalPausedTime = 0;
     private long pauseStartTime = 0;

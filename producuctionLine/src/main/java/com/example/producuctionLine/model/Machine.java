@@ -14,38 +14,31 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class Machine implements MachineObserver, Runnable {
 
-    // ========== IDENTIFICATION ==========
+    
     private String name; // M1, M2, etc. (for frontend)
     private int machineNumber; // 1, 2, 3 (numeric ID)
 
-    // ========== POSITION ==========
+    
     private double x;
     private double y;
 
-    /**
-     * -- GETTER --
-     *  Get status for JSON serialization
-     */
-    // ========== STATUS ==========
+    
     private String status = "idle"; // "idle", "processing", "error"
     private String currentTask; // Display current product ID
-    /**
-     * -- GETTER --
-     *  Check if machine is ready
-     */
+    
     private boolean ready = true; // Is machine ready for next product
 
-    // ========== APPEARANCE ==========
+    
     private String color;
     private String defaultColor = "#3b82f6"; // Blue
 
-    // ========== PROCESSING ==========
+    
     private int serviceTime; // Random processing time (ms)
 
     @JsonIgnore
     private Product currentProduct;
 
-    // ========== CONNECTIONS ==========
+    
     @JsonIgnore
     private List<Queue> inputQueues = new CopyOnWriteArrayList<>(); // Where products come from
 
@@ -92,11 +85,7 @@ public class Machine implements MachineObserver, Runnable {
 
     // ========== OBSERVER PATTERN ==========
 
-    /**
-     * Called when input queue has products available
-     * NOTE: This does NOT process the product - it just wakes up the machine
-     * The actual processing is done by SimulationManager's machine threads
-     */
+    
     @Override
     public void onProductAvailable(Queue queue) {
         // Just notify that products are available
@@ -104,11 +93,9 @@ public class Machine implements MachineObserver, Runnable {
         System.out.println("📢 " + name + " notified: products available in " + queue.getId());
     }
 
-    // ========== HELPER METHODS ==========
+    
 
-    /**
-     * Generate random service time between 1-5 seconds
-     */
+    
     private int generateServiceTime() {
         return new Random().nextInt(4000) + 1000;
     }

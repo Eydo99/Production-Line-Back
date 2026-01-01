@@ -66,9 +66,7 @@ public class Queue implements Observable {
     
     // ========== QUEUE OPERATIONS ==========
     
-    /**
-     * Add product to queue and notify observers
-     */
+    
     public synchronized void enqueue(Product product) {
         products.offer(product);
         System.out.println("📦 Product " + product.getId() + 
@@ -76,9 +74,7 @@ public class Queue implements Observable {
         notifyObservers(); // Notify machines waiting for products
     }
     
-    /**
-     * Remove and return product from queue
-     */
+    
     public synchronized Product dequeue() {
         Product product = products.poll();
         if (product != null) {
@@ -88,31 +84,22 @@ public class Queue implements Observable {
         return product;
     }
     
-    /**
-     * Get current queue size
-     */
+    
     public int size() {
         return products.size();
     }
     
-    /**
-     * Check if queue is empty
-     */
+    
     public boolean isEmpty() {
         return products.isEmpty();
     }
     
-    /**
-     * Get queue size for JSON serialization
-     */
+    
     public int getCurrentSize() {
         return size();
     }
     
-    /**
-     * Get product list for JSON serialization
-     * Returns list of products with their colors
-     */
+    
     public List<Product> getProductList() {
         return new ArrayList<>(products);
     }

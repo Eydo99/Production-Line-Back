@@ -11,12 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Service to manage simulation replay functionality.
- * Handles replay mode state, product replay tracking, and broadcasting updates.
- * 
- * @author Refactored from SimulationManager
- */
+
 @Service
 public class ReplayService {
 
@@ -31,15 +26,6 @@ public class ReplayService {
         this.broadcaster = broadcaster;
     }
 
-    /**
-     * Set up replay mode with products from a snapshot.
-     * Must be called before startSimulation() for deterministic replay.
-     *
-     * @param snapshot        The snapshot containing recorded products
-     * @param queues          Map of all queues to clear
-     * @param machines        Map of all machines to reset
-     * @param machineResetter Function to reset a machine to idle state
-     */
     public void setupReplayMode(SimulationSnapshot snapshot,
             Map<String, Queue> queues,
             Map<String, Machine> machines,
@@ -71,10 +57,6 @@ public class ReplayService {
 
         System.out.println("🔁 Replay mode enabled with " + productsToReplay.size() + " recorded products");
     }
-
-    /**
-     * Disable replay mode (for normal simulation).
-     */
     public void disableReplayMode() {
         this.isReplayMode = false;
         this.productsToReplay.clear();
@@ -82,13 +64,7 @@ public class ReplayService {
         System.out.println("🔁 Replay mode disabled");
     }
 
-    /**
-     * Get the current replay status.
-     *
-     * @param isRunning Whether the simulation is currently running
-     * @return Map containing replay status information
-     */
-    public Map<String, Object> getReplayStatus(boolean isRunning) {
+       public Map<String, Object> getReplayStatus(boolean isRunning) {
         return Map.of(
                 "isReplayMode", isReplayMode,
                 "isRunning", isRunning,
@@ -98,29 +74,17 @@ public class ReplayService {
                 "productsRemaining", productsToReplay.size() - replayIndex);
     }
 
-    /**
-     * Check if replay mode is enabled.
-     *
-     * @return true if in replay mode
-     */
+   
     public boolean isReplayMode() {
         return isReplayMode;
     }
 
-    /**
-     * Get the list of products to replay.
-     *
-     * @return List of product snapshots to replay
-     */
+   
     public List<ProductSnapshot> getProductsToReplay() {
         return productsToReplay;
     }
 
-    /**
-     * Get the current replay index.
-     *
-     * @return Current replay index
-     */
+   
     public int getReplayIndex() {
         return replayIndex;
     }
@@ -132,11 +96,7 @@ public class ReplayService {
         replayIndex++;
     }
 
-    /**
-     * Get the list of recorded products (for snapshot creation).
-     *
-     * @return List of recorded product snapshots
-     */
+   
     public List<ProductSnapshot> getRecordedProducts() {
         return recordedProducts;
     }
@@ -149,11 +109,7 @@ public class ReplayService {
         replayIndex = 0;
     }
 
-    /**
-     * Add a recorded product snapshot.
-     *
-     * @param snapshot The product snapshot to record
-     */
+   
     public void addRecordedProduct(ProductSnapshot snapshot) {
         recordedProducts.add(snapshot);
     }

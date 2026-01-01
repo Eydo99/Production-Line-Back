@@ -12,12 +12,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.function.BooleanSupplier;
 
-/**
- * Runnable class to handle machine processing thread.
- * Extracted from SimulationManager for better modularity.
- * 
- * @author Refactored
- */
+
 public class MachineRunner implements Runnable {
 
     private final Machine machine;
@@ -270,7 +265,7 @@ public class MachineRunner implements Runnable {
                 statisticsService.incrementProductsProcessed();
                 System.out.println("📤 " + machine.getName() + " sent product to " + selectedOutput.getId());
 
-                // ✅ FIXED: BROADCAST QUEUE UPDATE - Pass Queue object with products
+                
                 if (broadcaster != null) {
                     broadcaster.broadcastQueueUpdate(selectedOutput);
                 }
@@ -299,9 +294,7 @@ public class MachineRunner implements Runnable {
         }
     }
 
-    /**
-     * Helper method to reset machine to idle state
-     */
+    
     private void resetMachine() {
         machine.setCurrentProduct(null);
         machine.setCurrentTask(null);

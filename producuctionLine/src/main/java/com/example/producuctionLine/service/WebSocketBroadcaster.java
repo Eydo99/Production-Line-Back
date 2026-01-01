@@ -17,10 +17,7 @@ public class WebSocketBroadcaster {
         System.out.println("✅ WebSocketBroadcaster initialized");
     }
     
-    /**
-     * Broadcast queue update - ALWAYS takes Queue object to ensure products are included
-     * This is the ONLY method you should call from your code
-     */
+    
     public void broadcastQueueUpdate(Queue queue) {
         try {
             // Convert ALL products to DTOs with colors
